@@ -37,7 +37,7 @@
  * hello-world: Simply creates a device called /dev/hello-world, which
  * greets you when you try to get it.
  *
- * $Id: helloworld.c,v 1.11 2003/07/11 22:29:38 cerpa Exp $
+ * $Id$
  */
 
 /* EXAMPLE START helloworld.c */

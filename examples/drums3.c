@@ -43,7 +43,7 @@
  * However, it also prints a prompt to the console, asking the user if
  * how loud the drums should be.
  *
- * $Id: drums3.c,v 1.3 2003/07/11 22:29:38 cerpa Exp $
+ * $Id$
  */
 
 #include <stdio.h>
@@ -63,7 +63,7 @@ static char *drums_strings[] = {"bam", "bum", "beat", "boom",
 
 int volume = 2; /* default volume is 2 */
 
-int drums_read(struct fusd_file_info *file, char *user_buffer,
+ssize_t drums_read(struct fusd_file_info *file, char *user_buffer,
 	       size_t user_length, loff_t *offset)
 {
   int len;

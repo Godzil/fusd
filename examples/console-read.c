@@ -40,7 +40,7 @@
  * need a template from which to start on a real driver, use pager.c
  * instead.
  *
- * $Id: console-read.c,v 1.4 2003/07/11 22:29:38 cerpa Exp $
+ * $Id$
  */
 
 #include <stdio.h>
@@ -57,7 +57,7 @@ int do_open_or_close(struct fusd_file_info *file)
 }
 
 /* EXAMPLE START console-read.c */
-int do_read(struct fusd_file_info *file, char *user_buffer, 
+ssize_t do_read(struct fusd_file_info *file, char *user_buffer, 
 	    size_t user_length, loff_t *offset)
 {
   char buf[128];
@@ -88,7 +88,7 @@ int main(int argc, char *argv[])
     read: do_read,
     close: do_open_or_close };
   
-  if (fusd_register("/dev/console-read", "misc", "console-read", 0666, NULL, &fops) < 0)
+  if (fusd_register("/dev/console-read", "test", "console-read", 0666, NULL, &fops) < 0)
     perror("Unable to register device");
   else {
     printf("/dev/console-read should now exist - calling fusd_run...\n");

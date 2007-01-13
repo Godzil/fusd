@@ -41,7 +41,7 @@
  * the other examples, anyway), because this program is both an
  * example and part of the regression test suite.
  *
- * $Id: ioctl.c,v 1.4 2003/07/11 22:29:39 cerpa Exp $ 
+ * $Id$ 
  */
 
 #include <stdio.h>
@@ -115,8 +115,9 @@ int do_ioctl(struct fusd_file_info *file, int cmd, void *arg)
 
   case IOCTL_TEST1:
   case IOCTL_TEST2:
-    printf("ioctl server: got test1/2, arg=%d, returning it\n", (int) arg);
-    return (int) arg;
+    printf("ioctl server: got test1/2, arg=%p, *arg= %d, returning it\n", 
+	   arg, *(int *)arg);
+    return *(int *) arg;
     break;
 
 /* EXAMPLE START ioctl-server.c */
@@ -185,7 +186,8 @@ int main(int argc, char *argv[])
     /* ioctl server */
     struct fusd_file_operations f = { open: zeroreturn, close: zeroreturn,
 				      ioctl: do_ioctl};
-    if (fusd_register("ioctltest", 0666, NULL, &f) < 0)
+    if (fusd_register("/dev/ioctltest", "misc", "ioctltest", 
+		      0666, NULL, &f) < 0)
       perror("registering ioctltest");
     printf("server starting\n");
     fusd_run();
@@ -216,18 +218,24 @@ int main(int argc, char *argv[])
     CHECK(ret == 0);
 
     /* test1: issue a command with a simple (integer) argument */
-    ret = ioctl(fd, IOCTL_TEST1, TEST1_NUM);
-    CHECK(ret == TEST1_NUM);
-    CHECK(errno == 0);
-    printf("ioctl test1: got %d, errno=%d (expecting %d, errno=0)\n\n",
-	   ret, errno, TEST1_NUM);
+    {
+      int arg = TEST1_NUM;
+      ret = ioctl(fd, IOCTL_TEST1, &arg);
+      CHECK(ret == TEST1_NUM);
+      CHECK(errno == 0);
+      printf("ioctl test1: got %d, errno=%d (expecting %d, errno=0)\n\n",
+	     ret, errno, TEST1_NUM);
+    }
 
     /* test2 again: make sure errno is set properly */
-    ret = ioctl(fd, IOCTL_TEST2, -ELIBBAD);
-    CHECK(errno == ELIBBAD);
-    CHECK(ret == -1);
-    printf("ioctl test2: got %d, errno=%d (expecting -1, errno=%d)\n\n",
-	   ret, errno, ELIBBAD);
+    {
+      int arg = -ELIBBAD;
+      ret = ioctl(fd, IOCTL_TEST2, &arg);
+      CHECK(errno == ELIBBAD);
+      CHECK(ret == -1);
+      printf("ioctl test2: got %d, errno=%d (expecting -1, errno=%d)\n\n",
+	     ret, errno, ELIBBAD);
+    }
 
     printf("ioctl test3: expecting retval 0, string This Is Test3\n");
 /* EXAMPLE START ioctl-client.c */

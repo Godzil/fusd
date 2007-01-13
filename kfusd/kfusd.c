@@ -38,7 +38,7 @@
  * Copyright (c) 2001, Sensoria Corporation
  * Copyright (c) 2002-2003, Regents of the University of California
  *
- * $Id: kfusd.c,v 1.97 2003/07/11 22:29:39 cerpa Exp $
+ * $Id$
  */
 
 /*

@@ -1,13 +1,10 @@
 default: docs
 
 clean:
-	@rm -f *.[ch].example
+	rm -f *.[ch].example
+	rm -f fusd.dvi
 
-examples:
-	@rm -f *.[ch].example
-	@./make-examples.pl ../examples/*.[ch]
-
-docs: examples
+docs:
 	latex fusd
 	latex fusd
 

@@ -41,7 +41,7 @@
  * stored.  Then, when you read (e.g. "cat /dev/echo"), you get back
  * whatever you wrote most recently.
  *
- * $Id: echo.c,v 1.6 2003/07/11 22:29:38 cerpa Exp $ 
+ * $Id$ 
  */
 
 #include <stdio.h>
@@ -58,7 +58,7 @@
 char *data = NULL;
 int data_length = 0;
 
-int echo_read(struct fusd_file_info *file, char *user_buffer,
+ssize_t echo_read(struct fusd_file_info *file, char *user_buffer,
 	      size_t user_length, loff_t *offset)
 {
   /* if the user has read past the end of the data, return EOF */

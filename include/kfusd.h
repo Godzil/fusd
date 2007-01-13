@@ -37,7 +37,7 @@
  *
  * Private header file used by the Linux Kernel Module
  *
- * $Id: kfusd.h,v 1.41 2003/07/11 22:29:39 cerpa Exp $
+ * $Id$
  */
 
 #ifndef __KFUSD_H__

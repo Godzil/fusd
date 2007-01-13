@@ -42,7 +42,7 @@
  * not be read by anyone other than the driver owner (not even root!).
  * When you read from the device, it returns your PID to you.
  *
- * $Id: uid-filter.c,v 1.4 2003/07/11 22:29:39 cerpa Exp $
+ * $Id$
  */
 
 #include <stdio.h>
@@ -71,7 +71,7 @@ int do_open(struct fusd_file_info *file)
   return 0;
 }
 
-int do_read(struct fusd_file_info *file, char *user_buffer,
+ssize_t do_read(struct fusd_file_info *file, char *user_buffer,
 	    size_t user_length, loff_t *offset)
 {
   char buf[128];

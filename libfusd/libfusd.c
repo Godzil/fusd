@@ -35,10 +35,10 @@
  *
  * authors: jelson and girod
  *
- * $Id: libfusd.c,v 1.61 2003/07/11 22:29:39 cerpa Exp $
+ * $Id$
  */
 
-char libfusd_c_id[] = "$Id: libfusd.c,v 1.61 2003/07/11 22:29:39 cerpa Exp $";
+char libfusd_c_id[] = "$Id$";
 
 #include <stdio.h>
 #include <stdlib.h>

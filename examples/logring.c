@@ -71,7 +71,7 @@
  * but want to use it on a system that does not have FUSD, check out
  * emlog at http://www.circlemud.org/~jelson/software/emlog.
  *
- * $Id: logring.c,v 1.8 2003/07/11 22:29:39 cerpa Exp $
+ * $Id$
  */
 
 #include <stdio.h>
@@ -340,7 +340,7 @@ void logring_complete_polldiff(struct logring_client *c)
  * may come from the kernel before the driver has returned the first
  * one; if this happens, use fusd_destroy() to get rid of the older one.
  */
-ssize_t logring_polldiff(struct fusd_file_info *file, unsigned int flags)
+int logring_polldiff(struct fusd_file_info *file, unsigned int flags)
 {
   struct logring_client *c = (struct logring_client *) file->private_data;
 
