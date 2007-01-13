@@ -12,8 +12,8 @@ install: $(TARGETS)
 clean:
 	rm -f *.o *.d $(TARGETS) gmon.out *~ 
 
-$(TARGETS): %.o: %.c
-	$(CC) '-g -O2 $(SCF) $(GCF)' $< -o $@ libfusd.so.0.0 $(SLF)
+$(TARGETS): %: %.c
+	$(CC) $(GCF) $< -o $@ ../libfusd/libfusd.a 
 
 %.d: %.c
 	$(CC) -M $(CFLAGS) $< > $@.$$$$; sed 's,\($*\)\.o[ :]*,\1.o $@ : ,g' < $@.$$$$ > $@; rm -f $@.$$$$
