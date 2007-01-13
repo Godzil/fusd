@@ -1,0 +1,7 @@
+*.out
+*.log
+*.aux
+*.dvi
+*.toc
+*.lop
+*.[ch].example

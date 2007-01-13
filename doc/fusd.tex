@@ -1,0 +1,2013 @@
+%
+%
+% FUSD - Framework for User-Space Devices
+% Programming Manual & Tutorial
+%
+% Jeremy Elson, (c) 2001 Sensoria Corporation, 2003 UCLA
+% Released under open-source, BSD license
+% See LICENSE file for full license
+%
+% $Id: fusd.tex,v 1.63 2003/08/20 22:00:55 jelson Exp $
+
+\documentclass{article}
+\addtolength{\topmargin}{-.5in}        % repairing LaTeX's huge margins...
+\addtolength{\textheight}{1in}         % more margin hacking
+\addtolength{\textwidth}{1.5in}
+\addtolength{\oddsidemargin}{-0.75in}
+\addtolength{\evensidemargin}{-0.75in}
+
+\usepackage{graphicx,float,alltt,tabularx}
+\usepackage{wrapfig,floatflt}
+\usepackage{amsmath}
+\usepackage{latexsym}
+\usepackage{moreverb}
+\usepackage{times}
+\usepackage{html}
+%\usepackage{draftcopy}
+
+%\setcounter{bottomnumber}{3}
+%\renewcommand{\topfraction}{0}
+%\renewcommand{\bottomfraction}{0.7}
+%\renewcommand{\textfraction}{0}
+%\renewcommand{\floatpagefraction}{2.0}
+
+\renewcommand{\topfraction}{1.0}
+\renewcommand{\bottomfraction}{1.0}
+\renewcommand{\textfraction}{0.0}
+\renewcommand{\floatpagefraction}{0.9}
+
+\floatstyle{ruled}
+\newfloat{Program}{tp}{lop}
+
+
+\title{FUSD:
+A Linux {\bf F}ramework for {\bf U}ser-{\bf S}pace {\bf D}evices}
+
+\author{Jeremy Elson\\
+jelson@circlemud.org\\
+http://www.circlemud.org/\tilde{}jelson/software/fusd}
+\date{19 August 2003, Documentation for FUSD 1.10}
+
+\begin{document}
+
+%%%%%%%%%%%%%%%%%%%%%%%%% Title Page %%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{center}
+\begin{latexonly}\vspace*{2in}\end{latexonly}
+{\Huge FUSD:} \\
+\vspace{2\baselineskip}
+{\huge A Linux {\bf F}ramework for {\bf U}ser-{\bf S}pace {\bf D}evices}
+
+\begin{latexonly}\vspace{2in}\end{latexonly}
+\vspace{\baselineskip}
+
+\vfill
+
+{\large Jeremy Elson \\
+\begin{latexonly}\vspace{.5\baselineskip}\end{latexonly}}
+\vspace{\baselineskip}
+{\tt jelson@circlemud.org\\
+http://www.circlemud.org/jelson/software/fusd}
+
+\vspace{2\baselineskip}
+19 August 2003\\
+Documentation for FUSD 1.10\\
+
+\end{center}
+\thispagestyle{empty}
+\clearpage
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\begin{latexonly}
+\pagenumbering{roman}
+
+\tableofcontents
+\bigskip
+\listof{Program}{List of Example Programs}
+\setlength{\parskip}{10pt}
+
+\clearpage
+\end{latexonly}
+
+% This resets the page counter to 1
+\pagenumbering{arabic}
+\addtolength{\parskip}{0.5\baselineskip}
+
+\section{Introduction}
+
+\subsection{What is FUSD?}
+
+FUSD (pronounced {\em fused}) is a Linux framework for proxying device
+file callbacks into user-space, allowing device files to be
+implemented by daemons instead of kernel code.  Despite being
+implemented in user-space, FUSD devices can look and act just like any
+other file under /dev which is implemented by kernel callbacks.
+
+A user-space device driver can do many of the things that kernel
+drivers can't, such as perform a long-running computation, block while
+waiting for an event, or read files from the file system.  Unlike
+kernel drivers, a user-space device driver can {\em use other device
+drivers}---that is, access the network, talk to a serial port, get
+interactive input from the user, pop up GUI windows, or read from
+disks.  User-space drivers implemented using FUSD can be much easier
+to debug; it is impossible for them to crash the machine, are easily
+traceable using tools such as {\tt gdb}, and can be killed and
+restarted without rebooting even if they become corrupted.  FUSD
+drivers don't have to be in C---Perl, Python, or any other language
+that knows how to read from and write to a file descriptor can work
+with FUSD.  User-space drivers can be swapped out, whereas kernel
+drivers lock physical memory.
+
+Of course, as with almost everything, there are trade-offs.
+User-space drivers are slower than kernel drivers because they require
+three times as many system calls, and additional memory copies (see
+section~\ref{performance}).  User-space drivers can not receive
+interrupts, and do not have the full power to modify arbitrary kernel
+data structures as kernel drivers do.  Despite these limitations, we
+have found user-space device drivers to be a powerful programming
+paradigm with a wide variety of uses (see Section~\ref{use-cases}).
+
+FUSD is free software, distributed under a GPL-compatible license (the
+``new'' BSD license, with the advertising clause removed).
+
+\subsection{How does FUSD work?}
+
+FUSD drivers are conceptually similar to kernel drivers: a set of
+callback functions called in response to system calls made on file
+descriptors by user programs.  FUSD's C library provides a device
+registration function, similar to the kernel's {\tt
+devfs\_register\_chrdev()} function, to create new devices.  {\tt
+fusd\_register()} accepts the device name and a structure full of
+pointers.  Those pointers are callback functions which are called in
+response to certain user system calls---for example, when a process
+tries to open, close, read from, or write to the device file.  The
+callback functions should conform to the standard definitions of POSIX
+system call behavior.  In many ways, the user-space FUSD callback
+functions are identical to their kernel counterparts.
+
+Perhaps the best way to show what FUSD does is by example.
+Program~\ref{helloworld.c} is a simple FUSD device driver.  When the
+program is run, a device called {\tt /dev/hello-world} appears under
+the {\tt /dev} directory.  If that device is read (e.g., using {\tt
+cat}), the read returns {\tt Hello, world!} followed by an EOF.
+Finally, when the driver is stopped (e.g., by hitting Control-C), the
+device file disappears.
+
+\begin{Program}
+\listinginput[5]{1}{helloworld.c.example}
+\caption{helloworld.c: A simple program using FUSD to
+	create {\tt /dev/hello-world}}
+\label{helloworld.c}
+\end{Program}
+
+On line 40 of the source, we use {\tt fusd\_register()} to create the
+{\tt /dev/hello-world} device, passing pointers to callbacks for the
+open(), close() and read() system calls.  (Lines 36--39 use the GNU C
+extension that allows initializer field naming; the 2.4 series of
+Linux kernels use also that extension for the same purpose.)  The
+``Hello, World'' read() callback itself is virtually identical to what
+a kernel driver for this device would look like.  It can inspect and
+modify the user's file pointer, copy data into the user-provided
+buffer, control the system call return value (either positive, EOF, or
+error), and so forth.
+
+The proxying of kernel system calls that makes this kind of program
+possible is implemented by FUSD, using a combination of a kernel
+module and cooperating user-space library.  The kernel module
+implements a character device, {\tt /dev/fusd}, which is used as a
+control channel between the two.  fusd\_register() uses this channel
+to send a message to the FUSD kernel module, telling the name of the
+device the user wants to register.  The kernel module, in turn,
+registers that device with the kernel proper using devfs.  devfs and
+the kernel don't know anything unusual is happening; it appears from
+their point of view that the registered devices are simply being
+implemented by the FUSD module.
+
+Later, when kernel makes a callback due to a system call (e.g.\ when
+the character device file is opened or read), the FUSD kernel module's
+callback blocks the calling process, marshals the arguments of the
+callback into a message and sends it to user-space.  Once there, the
+library half of FUSD unmarshals it and calls whatever user-space
+callback the FUSD driver passed to fusd\_register().  When that
+user-space callback returns a value, the process happens in reverse:
+the return value and its side-effects are marshaled by the library
+and sent to the kernel.  The FUSD kernel module unmarshals this
+message, matches it up with a corresponding outstanding request, and
+completes the system call.  The calling process is completely unaware
+of this trickery; it simply enters the kernel once, blocks, unblocks,
+and returns from the system call---just as it would for any other
+blocking call.
+
+One of the primary design goals of FUSD is {\em stability}.  It should
+not be possible for a FUSD driver to corrupt or crash the kernel,
+either due to error or malice.  Of course, a buggy driver itself may
+corrupt itself (e.g., due to a buffer overrun).  However, strict error
+checking is implemented at the user-kernel boundary which should
+prevent drivers from corrupting the kernel or any other user-space
+process---including the errant driver's own clients, and other FUSD
+drivers.
+
+
+\subsection{What FUSD {\em Isn't}}
+
+FUSD looks similar to certain other Linux facilities that are already
+available.  It also skirts near a few of the kernel's hot-button
+political issues.  So, to avoid confusion, we present a list of
+things that FUSD is {\em not}.
+
+\begin{itemize}
+
+\item {\bf A FUSD driver is not a kernel module.}  Kernel modules
+allow---well, modularity of kernel code.  They let you insert and
+remove kernel modules dynamically after the kernel boots.  However,
+once inserted, the kernel modules are actually part of the kernel
+proper.  They run in the kernel's address space, with all the same
+privileges and restrictions that native kernel code does.  A FUSD
+device driver, in contrast, is more similar to a daemon---a program
+that runs as a user-space process, with a process ID.
+
+\item {\bf FUSD is not, and doesn't replace, devfs.}  When a FUSD
+driver registers a FUSD device, it automatically creates a device file
+in {\tt /dev}.  However, FUSD is not a replacement for devfs---quite
+the contrary, FUSD creates those device files by {\em using} devfs.
+In a normal Linux system, only kernel modules proper---not user-space
+programs---can register with devfs (see above).
+
+\item {\bf FUSD is not UDI.}  UDI, the \htmladdnormallinkfoot{Uniform
+Driver Interface}{http://www.projectudi.org}, aims to create a binary
+API for drivers that is uniform across operating systems.  It's true
+that FUSD could conceivably be used for a similar purpose (inasmuch as
+it defines a system call messaging structure).  However, this was not
+the goal of FUSD as much as an accidental side effect.  We do not
+advocate publishing drivers in binary-only form, even though FUSD does
+make this possible in some cases.
+
+\item {\bf FUSD is not an attempt to turn Linux into a microkernel.}
+We aren't trying to port existing drivers into user-space for a
+variety of reasons (not the least of which is performance).  We've
+used FUSD as a tool to write new drivers that are much easier from
+user-space than they would be in the kernel; see
+Section~\ref{use-cases} for use cases.
+
+
+\end{itemize}
+
+
+\subsection{Related Work}
+
+FUSD is a new implementation, but certainly not a new idea---the
+theory of its operation is the same as any microkernel operating
+system.  A microkernel (roughly speaking) is one that implements only
+very basic resource protection and message passing in the kernel.
+Implementation of device drivers, file systems, network stacks, and so
+forth are relegated to userspace.  Patrick Bridges maintains a list of
+such \htmladdnormallinkfoot{microkernel operating systems}{http://www.cs.arizona.edu/people/bridges/os/microkernel.html}.
+
+Also related is the idea of a user-space filesystem, which has been
+implemented in a number of contexts.  Some examples include Klaus
+Schauser's \htmladdnormallinkfoot{UFO
+Project}{http://www.cs.ucsb.edu/projects/ufo/index.html} for Solaris,
+and Jeremy Fitzhardinge's (no longer maintained)
+\htmladdnormallinkfoot{UserFS}{http://www.goop.org/~jeremy/userfs/}
+for Linux 1.x.  The \htmladdnormallinkfoot{UFO
+paper}{http://www.cs.ucsb.edu/projects/ufo/97-usenix-ufo.ps} is also
+notable because it has a good survey of similar projects that
+integrate user-space code with system calls.
+
+\subsection{Limitations and Future Work}
+
+In its current form, FUSD is useful and has proven to be quite
+stable---we use it in production systems.  However, it does have some
+limitations that could benefit from the attention of developers.
+Contributions to correct any of these deficiencies are welcomed!
+(Many of these limitations will not make sense without having read the
+rest of the documentation first.)
+
+
+\begin{itemize}
+\item Currently, FUSD only supports implementation of character
+devices.  Block devices and network devices are not supported yet.
+
+\item The kernel has 15 different callbacks in its {\tt
+file\_operations} structure.  The current version of FUSD does not
+proxy some of the more obscure ones out to userspace.
+
+\item Currently, all system calls that FUSD understands are proxied
+from the FUSD kernel module to userspace.  Only the userspace library
+knows which callbacks have actually been registered by the FUSD
+driver.  For example, the kernel may proxy a write() system call to
+user-space even if the driver has not registered a write() callback
+with fusd\_register().
+
+fusd\_register() should, but currently does not, tell the kernel
+module which callbacks it wants to receive, per-device.  This will be
+more efficient because it will prevent useless system calls for
+unsupported operations.  In addition, it will lead to more logical and
+consistent behavior by allowing the kernel to use its default
+implementations of certain functions such as writev(), instead of
+being fooled into thinking the driver has an implementation of it in
+cases where it doesn't.
+
+\item It should be possible to write a FUSD library in any language
+that supports reads and writes on raw file descriptors.  In the
+future, it might be possible to write FUSD device drivers in a variety
+of languages---Perl, Python, maybe even Java.  However, the current
+implementation has only a C library.
+
+\item It's possible for drivers that use FUSD to deadlock---for
+example, if a driver tries to open itself.  In this one case, FUSD
+returns {\tt -EDEADLOCK}.  However, deadlock protection should be
+expanded to more general detection of cycles of arbitrary length.
+
+\item FUSD should provide a /proc interface that gives debugging and
+status information, and allows parameter tuning.
+
+\item FUSD was written with efficiency in mind, but a number of
+important optimizations have not yet been implemented.  Specifically,
+we'd like to try to reduce the number of memory copies by using a
+buffer shared between user and kernel space to pass messages.
+
+\item FUSD currently requires devfs, which is used to dynamically
+create device files under {\tt /dev} when a FUSD driver registers
+itself.   This is, perhaps, the most convenient and useful paradigm
+for FUSD.  However, some users have asked if it's possible to use FUSD
+without devfs.  This should be possible if FUSD drivers bind to device
+major numbers instead of device file names.
+
+\end{itemize}
+
+
+
+
+\subsection{Author Contact Information and Acknowledgments}
+
+The original version of FUSD was written by Jeremy Elson
+\htmladdnormallink{(jelson@circlemud.org)}{mailto:jelson@circlemud.org}
+and Lewis Girod at Sensoria Corporation.
+Sensoria no longer maintains public releases of FUSD, but the same
+authors have since forked the last public release and continue to
+maintain FUSD from the University of California, Los Angeles.
+
+If you have bug reports, patches, suggestions, or any other comments,
+please feel free to contact the authors.
+
+FUSD has two
+\htmladdnormallinkfoot{SourceForge}{http://www.sourceforge.net}-host
+mailing lists: a low-traffic list for announcements ({\tt fusd-announce})
+and a list for general discussion ({\tt fusd-devel}).  Subscription
+information for both lists is available at the
+\htmladdnormallink{SourceForge's FUSD mailing list
+page}{http://sourceforge.net/mail/?group_id=36326}.
+
+For the latest releases and information about FUSD, please see the
+\htmladdnormallinkfoot{official FUSD home
+page}{http://www.circlemud.org/jelson/software/fusd}.
+
+
+
+\subsection{Licensing Information}
+
+FUSD is free software, distributed under a GPL-compatible license (the
+``new'' BSD license, with the advertising clause removed).  The
+license is enumerated in its entirety below.
+
+Copyright (c) 2001, Sensoria Corporation; (c) 2003 University of
+California, Los Angeles.  All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+\begin{itemize}
+\item Redistributions of source code must retain the above copyright
+notice, this list of conditions and the following disclaimer.
+
+\item Redistributions in binary form must reproduce the above
+copyright notice, this list of conditions and the following disclaimer
+in the documentation and/or other materials provided with the
+distribution.
+
+\item Neither the names of Sensoria Corporation or UCLA, nor the
+names of other contributors may be used to endorse or promote products
+derived from this software without specific prior written permission.
+\end{itemize}
+
+THIS SOFTWARE IS PROVIDED BY THE AUTHORS AND CONTRIBUTORS ``AS IS'' AND
+ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE AUTHORS OR CONTRIBUTORS
+BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR
+BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY,
+WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE
+OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN
+IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+\section{Why use FUSD?}
+\label{use-cases}
+
+One basic question about FUSD that one might ask is: what is it good
+for?  Why use it?  In this section, we describe some of the situations
+in which FUSD has been the solution for us.
+
+\subsection{Device Driver Layering}
+
+A problem that comes up frequently in modern operating systems is
+contention for a single resource by multiple competing processes.  In
+UNIX, it's the job of a device driver to coordinate access to such
+resources.  By accepting requests from user processes and (for
+example) queuing and serializing them, it becomes safe for processes
+that know nothing about each other to make requests in parallel to the
+same resource.  Of course, kernel drivers do this job already, but
+they typically operate on top of hardware directly.  However, kernel
+drivers can't easily be layered on top of {\em other device drivers}.
+
+For example, consider a device such as a modem that is connected to a
+host via a serial port.  Let's say we want to implement a device
+driver that allows multiple users to dial the telephone (e.g., {\tt
+echo 1-310-555-1212 > /dev/phone-dialer}).  Such a driver should be
+layered {\em on top of} the serial port driver---that is, it most
+likely wants to write to {\tt /dev/ttyS0}, not directly to the UART
+hardware itself.
+
+While it is possible to write to a logical file from within a kernel
+device driver, it is both tricky and considered bad practice.  In the
+\htmladdnormallinkfoot{words of kernel hacker Dick Johnson}
+{http://www.uwsg.indiana.edu/hypermail/linux/kernel/0005.3/0061.html},
+``You should never write a [kernel] module that requires reading or
+writing to any logical device. The kernel is the thing that translates
+physical I/O to logical I/O. Attempting to perform logical I/O in the
+kernel is effectively going backwards.''
+
+With FUSD, it's possible to layer device drivers because the driver is
+a user-space process, not a kernel module.  A FUSD implementation of
+our hypothetical {\tt /dev/phone-dialer} can open {\tt /dev/ttyS0}
+just as any other process would.
+
+Typically, such layering is accomplished by system daemons.  For
+example, the {\tt lpd} daemon manages printers at a high level.  Since
+it is a user-space process, it can access the physical printer devices
+using kernel device drivers (for example, using printer or network
+drivers).  There a number of advantages to using FUSD instead:
+\begin{itemize}
+\item Using FUSD, a daemon/driver can create a standard device file
+which is accessible by any program that knows how to use the POSIX
+system call interface.  Some trickery is possible using named
+pipes and FIFOs, but quickly becomes difficult because of multiplexed
+writes from multiple processes.
+\item FUSD drivers receive the UID, GID, and process ID along with
+every file operation, allowing the same sorts of security policies to
+be implemented as would be possible with a real kernel driver.  In
+contrast, writes to a named pipe, UDP, and so forth are ``anonymous.''
+\end{itemize}
+
+\subsection{Use of User-Space Libraries}
+
+Since a FUSD driver is just a regular user-space program, it can
+naturally use any of the enormous body of existing libraries that
+exist for almost any task.  FUSD drivers can easily incorporate user
+interfaces, encryption, network protocols, threads, and almost
+anything else.  In contrast, porting arbitrary C code into the kernel
+is difficult and usually a bad idea.
+
+\subsection{Driver Memory Protection}
+
+Since FUSD drivers run in their own process space, the rest of the
+system is protected from them.  A buggy or malicious FUSD driver, at
+the very worst, can only corrupt itself.  It's not possible for it to
+corrupt the kernel, other FUSD drivers, or even the processes that are
+using its devices.  In contrast, a buggy kernel module can bring down
+any process in the system, or the entire kernel itself.
+
+\subsection{Giving libraries language independence and standard
+notification interfaces}
+
+One particularly interesting application of FUSD that we've found very
+useful is as a way to let regular user-space libraries export device
+file APIs.  For example, imagine you had a library which factored
+large composite numbers.  Typically, it might have a C
+interface---say, a function called {\tt int\ *factorize(int\ bignum)}.
+With FUSD, it's possible to create a device file interface---say, a
+device called {\tt /dev/factorize} to which clients can {\tt write(2)}
+a big number, then {\tt read(2)} back its factors.
+
+This may sound strange, but device file APIs have at least three
+advantages over a typical library API.  First, it becomes much more
+language independent---any language that can make system calls can
+access the factorization library.  Second, the factorization code is
+running in a different address space; if it crashes, it won't crash or
+corrupt the caller.  Third, and most interestingly, it is possible to
+use {\tt select(2)} to wait for the factorization to complete.  {\tt
+select(2)} would make it easy for a client to factor a large number
+while remaining responsive to {\em other} events that might happen in
+the meantime.  In other words, FUSD allows normal user-space libraries
+to integrate seamlessly with UNIX's existing, POSIX-standard event
+notification interface: {\tt select(2)}.
+
+\subsection{Development and Debugging Convenience}
+
+FUSD processes can be developed and debugged with all the normal
+user-space tools.  Buggy drivers won't crash the system, but instead
+dump cores that can be analyzed.  All of your favorite visual
+debuggers, memory bounds checkers, leak detectors, profilers, and
+other tools can be applied to FUSD drivers as they would to any other
+program.
+
+\section{Installing FUSD}
+
+This section describes the installation procedure for FUSD.  It
+assumes a good working knowledge of Linux system administration.
+
+
+\subsection{Prerequisites}
+
+Before installing FUSD, make sure you have all of the following
+packages installed and working correctly:
+
+\begin{itemize}
+\item {\bf Linux kernel 2.4.0 or later}.  FUSD was developed under
+2.4.0 and should work with any kernel in the 2.4 series.
+
+\item {\bf devfs installed and running.}  FUSD dynamically registers
+devices using devfs, the Linux device filesystem by Richard Gooch.
+For FUSD to work, devfs must be installed and running on your system.
+For more information about devfs installation, see the
+\htmladdnormallinkfoot{devfs home
+page}{http://www.atnf.csiro.au/~rgooch/linux/docs/devfs.html}.
+
+Note that some distributions make installation devfs easier.  RedHat
+7.1, for example, already has all of the necessary daemons and
+configuration changes integrated.  devfs can be installed simply by
+recompiling the kernel with devfs support enabled and reconfiguring
+LILO to pass {\tt "devfs=mount"} to the kernel.
+\end{itemize}
+
+
+\subsection{Compiling FUSD as a Kernel Module}
+
+Before compiling anything, take a look at the Makefile in FUSD's home
+directory.  Adjust any constants that are not correct.  In particular,
+make sure {\tt KERNEL\_HOME} correctly reflects the place where your
+kernel sources are installed, if they aren't in the default location
+of {\tt /usr/src/linux}.
+
+Then, type {\tt make}.  It should generate a directory whose name
+looks something like {\tt obj.i686-linux}, or some variation depending
+on your architecture.  Inside of that directory will be a number of
+files, including:
+\begin{itemize}
+\item kfusd.o -- The FUSD kernel module
+\item libfusd.a -- The C library used to talk to the kernel module
+\item Example programs -- linked against libfusd.a
+\end{itemize}
+
+Compilation of the kernel module will fail if the dependencies
+described in the previous section are not satisfied.  The module must
+be compiled again Linux kernel must be v2.4.0 or later, and the kernel
+must have devfs support enabled.
+
+
+\subsection{Testing and Troubleshooting}
+
+Once everything has been compiled, give it a try to see if it actually
+does something.  First, use {\tt insmod} to insert the FUSD kernel
+module, e.g. {\tt insmod obj.i686-linux/kfusd.o}.  A greeting message
+similar to ``{\tt fusd: starting, Revision: 1.50}'' should appear in
+the kernel log (accessed using the {\tt dmesg} command, or by typing
+{\tt cat /proc/kmsg}).  You can verify the module has been inserted by
+typing {\tt lsmod}, or alternatively {\tt cat /proc/modules}.
+
+Once the module has been inserted successfully, trying running the
+{\tt helloworld} example program.  When run, the program should print
+a greeting message similar to {\tt /dev/hello-world should now exist -
+calling fusd\_run}.  This means everything is working; the daemon is
+now blocked, waiting for requests to the new device.  From another
+shell, type {\tt cat /dev/hello-world}.  You should see {\tt Hello,
+world!} printed in response.  Try killing the test program; the
+corresponding device file should disappear.
+
+If nothing seems to be working, try looking at the kernel message log
+(type {\tt dmesg} or {\tt cat /proc/kmsg}) to see if there are any
+errors.  If nothing seems obviously wrong, try turning on FUSD kernel
+module debugging by defining {\tt CONFIG\_FUSD\_DEBUG} in kfusd.c,
+then recompiling and reinserting the module.
+
+
+\subsection{Installation}
+
+Typing {\tt make install} will copy the FUSD library, header files,
+and man pages into {\tt /usr/local}.  The FUSD kernel module is {\em
+not} installed automatically because of variations among different
+Linux distributions in how this is accomplished.  You may want to
+arrange to have the module start automatically on boot by (for
+example) copying it into {\tt /lib/modules/your-kernel-version}, and
+adding it to {\tt /etc/modules.conf}.
+
+
+\subsection{Making FUSD Part of the Kernel Proper}
+
+The earlier instructions, by default, create a FUSD kernel module.
+If desired, it's also very easy to build FUSD right into the kernel,
+instead:
+\begin{enumerate}
+\item Unpack the 2.4 kernel sources and copy all the files in the {\tt
+include} and {\tt kfusd} directories into your kernel source tree,
+under {\tt drivers/char}.  For example, if FUSD is in
+your home directory, and your kernel is in {\tt /usr/src/linux}:
+\begin{verbatim}
+        cp ~/fusd/kfusd/* ~/fusd/include/* /usr/src/linux/drivers/char
+\end{verbatim}
+
+\item Apply the patch found in FUSD's {\tt patches} directory to your
+kernel source tree.  For example:
+\begin{verbatim}
+        cd /usr/src/linux
+        patch -p0 < ~/fusd/patches/fusd-inkernel.patch
+\end{verbatim}
+The FUSD in-kernel patch doesn't actually change any kernel sources
+proper; it just adds FUSD to the kernel configuration menu and
+Makefile.
+\item Using your kernel configurator of choice (e.g. {\tt make
+menuconfig}), turn on the FUSD options.  It will be under the
+``Character devices'' menu.
+\item Build and install the kernel as usual.
+\end{enumerate}
+
+
+\section{Basic Device Creation}
+
+Enough introduction---it's time to actually create a basic device
+driver using FUSD!
+
+This following sections will illustrate various techniques using
+example programs.  To save space, interesting excerpts are shown
+instead of entire programs.  However, the {\tt examples} directory
+of the FUSD distribution contains all the examples in their
+entirety.  They can actually be compiled and run on a system with the
+FUSD kernel module installed.
+
+Where this text refers to example program line numbers, it refers to
+the line numbers printed alongside the excerpts in the manual---not
+the line numbers of the actual programs in the {\tt examples}
+directory.
+
+
+\subsection{Using {\tt fusd\_register} to create a new device}
+\label{using-fusd-register}
+
+We saw an example of a simple driver, helloworld.c, in
+Program~\ref{helloworld.c} on page~\pageref{helloworld.c}.  Let's go
+back and examine that program now in more detail.
+
+The FUSD ball starts rolling when the {\tt fusd\_register} function is
+called, as shown on line 40.  This function tells the FUSD kernel
+module:
+\begin{itemize}
+\item {\tt char *name}---The name of the device being created.  The
+prefix (such as {\tt /dev/}) must match the location where devfs has
+been mounted.  Names containing slashes (e.g., {\tt
+/dev/my-devices/dev1}) are legal; devfs creates subdirectories
+automatically.
+\item {\tt mode\_t mode}---The device's default permissions.  This is
+usually specified using an octal constant with a leading 0---{\tt 0666}
+(readable and writable by everyone) instead of the incorrect decimal
+constant {\tt 666}.
+\item {\tt void *device\_info}---Private data that should be passed to
+callback functions for this device.  The use of this field is
+described in Section~\ref{device-info}.
+\item {\tt struct fusd\_file\_operations *fops}---A structure containing
+pointers to the callback functions that should be called by FUSD
+in response to certain events.
+\end{itemize}
+
+If device registration is successful, {\tt fusd\_register} returns a
+{\em device handle}---a small integer $\ge0$.  On errors, it returns
+-1 and sets the global variable {\tt errno} appropriately.  In
+reality, the device handle you get is a plain old file descriptor,
+as we'll see in Section~\ref{selecting}.
+
+Although Program~\ref{helloworld.c} only calls {\tt fusd\_register}
+once, it can be called multiple times if the FUSD driver is handling
+more than one device as we'll see in Program~\ref{drums.c}.
+
+There is intentional similarity between {\tt fusd\_register()} and the
+kernel's device registration functions, such as {\tt
+devfs\_register()} and {\tt register\_chrdev()}.  In many ways, FUSD's
+interface is meant to mirror the kernel interface as closely as
+possible.
+
+The {\tt fusd\_file\_operations} structure, defined in {\tt fusd.h},
+contains a list of callbacks that are used in response to different
+system calls executed on a file.  It is similar to the kernel's {\tt
+file\_operations} structure, accepting callbacks for system calls such
+as {\tt open()}, {\tt close()}, {\tt read()}, {\tt write()}, and {\tt
+ioctl()}.  For the most part, the prototypes of FUSD file operation
+callbacks are the same as their kernel cousins, with one important
+exception.  The first argument of FUSD callbacks is always a pointer
+to a {\tt fusd\_file\_info} structure; it contains information that
+can be used to identify the file.  This structure is used instead of
+the kernel's {\tt file} and {\tt inode} structures, and will be
+described in more detail later.
+
+In lines 35--38 of Program~\ref{helloworld.c}, we create and
+initialize a {\tt fusd\_file\_operations} structure.  A GCC-specific C
+extension allows us to name structure fields explicitly in the
+initializer.  This style may look strange, but it guards against
+errors in the future in case the order of fields in the structure ever
+changes.  The 2.4 kernel series uses the same trick.
+
+After calling {\tt fusd\_register()} on line 40, the example program
+calls {\tt fusd\_run()} on line 44.  This function turns control over
+to the FUSD framework.  fusd\_run blocks the driver until one of the
+devices it registered needs to be serviced.  Then, it calls the
+appropriate callback and blocks again until the next event.
+
+Now, imagine that a user types {\tt cat /dev/hello-world}.  What
+happens?  Recall first what the {\tt cat} program itself does: opens a
+file, reads from it until it receives an EOF (printing whatever it
+reads to stdout), then closes it.  {\tt cat} works the same way
+regardless of what it's reading---be it a a FUSD device, a regular
+file, a serial port, or anything else.  The {\tt strace} program is a
+great way to see this in action; see Appendix~\ref{strace} for
+details.
+
+\subsection{The {\tt open} and {\tt close} callbacks}
+\label{open-close}
+
+The first two callbacks that most drivers typically implement are {\tt
+open} and {\tt close}.  Each of these two functions are passed just
+one argument---the {\tt fusd\_file\_info} structure that describes the
+instance of the file being opened or closed.  Use of the information
+in that structure will be covered in more detail in
+Section~\ref{fusd-file-info}.
+
+The semantics of an {\tt open} callback's return value are exactly the
+same as inside the kernel:
+\begin{itemize}
+\item 0 means success, and the file is opened.  If the file is allowed
+to open, the kernel returns a valid file descriptor to the client.
+Using that descriptor, other callbacks may be called for that file,
+including (at least) a {\tt close} callback.
+
+\item A negative number indicates a failure, and that the file should
+not be opened.  Such return values should {\em always} be the
+specified as a negative {\tt errno} value such as {\tt -EPERM}, {\tt
+-EBUSY}, {\tt -ENODEV}, {\tt -ENOMEM}, and so on.  For example, if the
+callback returns {\tt -EPERM}, the caller's {\tt open()} will return
+-1, with {\tt errno} set to {\tt EPERM}.  A complete list of possible
+return values can be found in the Linux kernel sources, under {\tt
+include/asm/errno.h}.
+\end{itemize}
+
+If an {\tt open} callback returns 0 (success), a driver is {\em
+guaranteed} to receive exactly one {\tt close} callback for that file
+later.  By the same token, the close callback {\em will not} be called
+if the open fails.  Therefore, {\tt open} callbacks that can return
+failure must be sure to deallocate any resources they might have
+allocated before returning a failure.
+
+Let's return to our example in Program~\ref{helloworld.c}, which
+creates the {\tt /dev/hello-world} device.  If a user types {\tt cat
+/dev/hello-world}, {\tt cat} will will use the {\tt open(2)} system
+call to open the file.  FUSD will then proxy that system call to the
+driver and activate the callback that was registered as the {\tt open}
+callback.  Recall from line 36 of Program~\ref{helloworld.c} that we
+registered {\tt do\_open\_or\_close}, which appears on line 8.
+
+In {\tt helloworld.c}, the {\tt open} callback always returns 0, or
+success.  However, in a real driver, something more interesting will
+probably happen---permissions checks, memory allocation for
+state-keeping, and so forth.  The corresponding {\em de}-allocation of
+those resources should occur in the {\tt close} callback, which is
+called when a user application calls {\tt close} on their file
+descriptor.  {\tt close} callbacks are allowed to return error values,
+but this does not prevent the file from actually closing.
+
+
+
+\subsection{The {\tt read} callback}
+\label{read-callback}
+
+Returning to our {\tt cat /dev/hello-world} example, what happens
+after the {\tt open} is successful?  Next, {\tt cat} will try to use
+{\tt read(2)}, which will get proxied by FUSD to the function {\tt
+do\_read} on line 13.  This function takes some additional arguments
+that we didn't see in the open and close callbacks:
+\begin{itemize}
+\item {\tt struct fusd\_file\_info *file}---The first argument to all
+callbacks, containing information which describes the file; see
+Section~\ref{fusd-file-info}.
+\item {\tt char *user\_buffer}---The buffer that the callback should use to
+write data that it is returning to the user.
+\item {\tt size\_t user\_length}---The maximum number of bytes
+requested by the user.  The driver is allowed to return fewer bytes,
+but should never write more then {\tt user\_length} bytes into {\tt
+user\_buffer}.
+\item {\tt loff\_t *offset}---A pointer to an integer which represents
+the caller's offset into the file (i.e., the user's file pointer).
+This value can be modified by the callback; any change will be
+propagated back to the user's file pointer inside the kernel.
+\end{itemize}
+
+The semantics of the return value are the same as if the
+callback were being written inside the kernel itself:
+\begin{itemize}
+\item Positive return values indicate success.  If the call is
+successful, and the driver has copied data into {\tt buffer}, the
+return value indicates how many bytes were copied.  This number should
+never be greater than the {\tt user\_length} argument.
+\item A 0 return value indicates EOF has been reached on the file.
+\item As in the {\tt open} and {\tt close} callbacks, negative values
+(such as -EPERM, -EPIPE, or -ENOMEM) indicate errors. Such values will
+cause the user's {\tt read()} to return -1 with errno set
+appropriately.
+\end{itemize}
+
+The first time a read is done on a device file, the user's file
+pointer ({\tt *offset}) is 0.  In the case of this first read, a
+greeting message of {\tt Hello, world!} is copied back to the user, as
+seen on line 24.  The user's file pointer is then advanced.  The next
+read therefore fails the comparison at line 20, falling straight
+through to return 0, or EOF.
+
+In this simple program, we also see an example of an error return on
+line 22: if the user tries to do a read smaller than the length of the
+greeting message, the read will fail with -EINVAL.  (In an actual
+driver, it would normally not be an error for a user to provide a
+smaller read buffer than the size of the available data.  The right
+way for drivers to handle this situation is to return partial data,
+then move {\tt *offset} forward so that the remainder is returned on
+the next {\tt read()}.  We see an example of this in
+Program~\ref{echo.c}.)
+
+\subsection{The {\tt write} callback}
+
+Program~\ref{helloworld.c} illustrated how a driver could return data
+{\em to} a client using the {\tt read} callback.  As you might expect, there
+is a corresponding {\tt write} callback that allows the driver to
+receive data {\em from} a client.  {\tt write} takes four arguments,
+similar to the {\tt read} callback:
+
+\begin{itemize}
+\item {\tt struct fusd\_file\_info *file}---The first argument to all
+callbacks, containing information which describes the file; see
+Section~\ref{fusd-file-info}.
+\item {\tt const char *user\_buffer}---Pointer to data being written
+by the client (read-only).
+\item {\tt size\_t user\_length}---The number of bytes pointed to by
+{\tt user\_buffer}.
+\item {\tt loff\_t *offset}---A pointer to an integer which represents
+the caller's offset into the file (i.e., the user's file pointer).
+This value can be modified by the callback; any change will be
+propagated back to the user's file pointer inside the kernel.
+\end{itemize}
+
+The semantics of {\tt write}'s return value are the same as in a
+kernel callback:
+\begin{itemize}
+\item Positive return values indicate success and indicate how many
+bytes of the user's buffer were successfully written (i.e.,
+successfully processed by the driver in some way).  The return value
+may be less than or equal to the {\tt user\_length} argument, but
+should never be greater.
+\item 0 should only be returned in response to a {\tt write} of length
+0.
+\item Negative values (such as -EPERM, -EPIPE, or -ENOMEM) indicate
+errors.  Such values will cause the user's {\tt write()} to return -1
+with errno set appropriately.
+\end{itemize}
+
+Program~\ref{echo.c}, echo.c, is an example implementation of a device
+({\tt /dev/echo}) that uses both {\tt read()} and {\tt write()}
+callbacks.  A client that tries to {\tt read()} from this device will
+get the contents of the most recent {\tt write()}.  For example:\\
+\begin{minipage}{\textwidth}
+\vspace{\baselineskip}
+\begin{verbatim}
+% echo Hello there > /dev/echo
+% cat /dev/echo
+Hello there
+% echo Device drivers are fun > /dev/echo
+% cat /dev/echo
+Device drivers are fun
+
+\end{verbatim}
+\end{minipage}
+
+\begin{Program}
+\listinginput[5]{1}{echo.c.example}
+\caption{echo.c: Using both {\tt read} and {\tt write} callbacks}
+\label{echo.c}
+\end{Program}
+
+The implementation of {\tt /dev/echo} keeps a global variable, {\tt
+data}, which serves as a cache for the data most recently written to
+the driver by a client program.  The driver does not assume the data
+is null-terminated, so it also keeps track of the number of bytes of
+data available.  (These two variables appear on lines 1--2.)
+
+The driver's {\tt write} callback first frees any data which might
+have been allocated by a previous call to write (lines 26--29).  Next,
+on line 33, it attempts to allocate new memory for the new data
+arriving.  If the allocation fails, {\tt -ENOMEM} is returned to the
+client.  If the allocation is successful, the driver copies the data
+into its local buffer and stores its length (lines 37--38).  Finally,
+the driver tells the user that the entire buffer was consumed by
+returning a value equal to the number of bytes the user tried to write
+({\tt user\_length}).
+
+The {\tt read} callback has some extra features that we did not see in
+Program~\ref{helloworld.c}'s {\tt read()} callback.  The most
+important is that it allows the driver to read the available data {\em
+incrementally}, instead of requiring that the first {\tt read()}
+executed by the client has enough space for all the data the driver
+has available.  In other words, a client can do two 50-byte reads,
+and expect the same effect as if it had done a single 100-byte read.
+
+This is implemented using {\tt *offset}, the user's file pointer.  If
+the user is trying to read past the amount of data we have available,
+the driver returns EOF (lines 8--9).  Normally, this happens after the
+client has finished reading data.  However, in this driver, it might
+happen on a client's first read if nothing has been written to the
+driver yet or if the most recent write's memory allocation failed.
+
+If there is data to return, the driver computes the number of bytes
+that should be copied back to the client---the minimum of the number
+of bytes the user asked for, and the number of bytes of data that this
+client hasn't seen yet (line 12).  This data is copied back to the
+user's buffer (line 15), and the user's file pointer is advanced
+accordingly (line 16).  Finally, on line 19, the client is told how
+many bytes were copied to its buffer.
+
+
+\subsection{Unregistering a device with {\tt fusd\_unregister()}}
+
+All devices registered by a driver are unregistered automatically when
+the program exits (or crashes).  However, the {\tt fusd\_unregister()}
+function can be used to unregister a device without terminating the
+entire driver.  {\tt fusd\_unregister} takes one argument: a device
+handle (i.e., the return value from {\tt fusd\_register()}).
+
+A device can be unregistered at any time.  Any client system calls
+that are pending when a device is unregistered will return immediately
+with an error.  In this case, {\tt errno} will be set to {\tt -EPIPE}.
+
+
+\section{Using Information in {\tt fusd\_file\_info}}
+
+\label{fusd-file-info}
+
+We mentioned in the previous sections that the first argument to every
+callback is a pointer to a {\tt fusd\_file\_info} structure.  This
+structure contains information that can be useful to driver
+implementers in deciding how to respond to a system call request.
+
+The fields of {\tt fusd\_file\_info} structures fall into several
+categories:
+\begin{itemize}
+\item {\em Read-only.}  The driver can inspect the value, but changing
+it will have no effect.
+\begin{itemize}
+\item {\tt pid\_t pid}: The process ID of the process making the
+request
+\item {\tt uid\_t uid}: The user ID of the owner of the process making
+the request
+\item {\tt gid\_t gid}: The group ID of the owner of the process making
+the request
+\end{itemize}
+\item {\em Read-write.}  Any changes to the value will be propagated
+back to the kernel and be written to the appropriate in-kernel
+structure.
+\begin{itemize}
+\item {\tt unsigned int flags}: A copy of the {\tt f\_flags} field in
+the kernel's {\tt file} structure.  The flags are an or'd-together set
+of the kernel's {\tt O\_} series of flags: {\tt O\_NONBLOCK}, {\tt
+O\_APPEND}, {\tt O\_SYNC}, etc.
+\item {\tt void *device\_info}: The data passed to {\tt
+fusd\_register} when the device was registered; see
+Section~\ref{device-info} for details
+\item {\tt void *private\_data}: A generic per-file-descriptor pointer
+usable by the driver for its own purposes, such as to keep state (or a
+pointer to state) that should be maintained between operations on the
+same instance of an open file.  It is guaranteed to be NULL when the
+file is first opened.  See Section~\ref{private-data} for more
+details.
+\end{itemize}
+\item {\em Hidden fields.}  The driver should not touch these fields
+(such as {\tt fd}).  They contain state used by the FUSD library to
+generate the reply sent to the kernel.
+\end{itemize}
+
+{\bf Important note:} the value of the {\tt fusd\_file\_info} pointer
+itself has {\em no meaning}.  Repeated requests on the same file
+descriptor {\em will not} generate callbacks with identical {\tt
+fusd\_file\_info} pointer values, as would be the case with an
+in-kernel driver.  In other words, if a driver needs to keep state in
+between successive system calls on a user's file descriptor, it {\em
+must} store that state using the {\tt private\_data} field.  The {\tt
+fusd\_file\_info} pointer itself is ephemeral; the data to which it
+points is persistent.
+
+Program~\ref{uid-filter.c} shows an example of how a driver might make
+use of the data in the {\tt fusd\_file\_info} structure.  Much of the
+driver is identical to helloworld.c.  However, instead of printing a
+static greeting, this new program generates a custom message each time
+the device file is read, as seen on line 25.  The message contains the
+PID of the user process that requested the read ({\tt file->pid}).
+
+\begin{Program}
+\listinginput[5]{1}{uid-filter.c.example}
+\caption{uid-filter.c: Inspecting data in {\tt fusd\_file\_info} such
+as UID and PID of the calling process}
+\label{uid-filter.c}
+\end{Program}
+
+In addition, Program~\ref{uid-filter.c}'s {\tt open} callback does not
+return 0 (success) unconditionally as it did in
+Program~\ref{helloworld.c}.  Instead, it checks (on line 7) to make
+sure the UID of the process trying to read from the device ({\tt
+file->uid}) matches the UID under which the driver itself is running
+({\tt getuid()}).  If they don't match, -EPERM is returned.  In other
+words, only the user who ran the driver is allowed to read from the
+device that it creates.  If any other user---including root!---tries
+to open it, a ``Permission denied'' error will be generated.
+
+
+\subsection{Registration of Multiple Devices, and Passing Data to Callbacks}
+
+\label{device-info}
+
+Device drivers frequently expose several different ``flavors'' of a
+device.  For example, a single magnetic tape drive will often have
+many different device files in {\tt /dev}.  Each device file
+represents a different combination of options such as
+rewind/no-rewind, or compressed/uncompressed.  However, they access
+the same physical tape drive.
+
+Traditionally, the device file's {\em minor number} was used to
+communicate the desired options with device drivers.  But, since devfs
+dynamically (and unpredictably) generates both major and minor numbers
+every time a device is registered, a different technique was
+developed.  When using devfs, drivers are allowed to associate a value
+(of type {\tt void *}) with each device they register.  This facility
+takes the place of the minor number.
+
+The devfs solution is also used by FUSD.  The mysterious third
+argument to {\tt fusd\_register} that we mentioned in
+Section~\ref{using-fusd-register} is an arbitrary piece of data that
+can be passed to FUSD when a device is registered.  Later, when a
+callback is activated, the contents of that argument are available in
+the {\tt device\_info} member of the {\tt fusd\_file\_info} structure.
+
+Program~\ref{drums.c} shows an example of this technique, inspired by 
+Alessandro Rubini's similar devfs tutorial
+\htmladdnormallinkfoot{published in Linux
+Magazine}{http://www.linux.it/kerneldocs/devfs/}.  It creates a number
+of devices in the {\tt /dev/drums} directory, each of which is useful
+for generating a different kind of ``sound''---{\tt /dev/drums/bam},
+{\tt /dev/drums/boom}, and so on.  Reading from any of these devices
+will return a string equal to the device's name.
+
+\begin{Program}
+\listinginput[5]{1}{drums.c.example}
+\caption{drums.c: Passing private data to {\tt fusd\_register} and
+retrieving it from {\tt device\_info}}
+\label{drums.c}
+\end{Program}
+
+The first thing to notice about {\tt drums.c} is that it registers
+more than one FUSD device.  In the loop starting in line 31, it calls
+{\tt fusd\_register()} once for every device named in {\tt
+drums\_strings} on line 1.  When {\tt fusd\_run()} is called, it
+automatically watches every device the driver registered, and
+activates the callbacks associated with each device as needed.
+Although {\tt drums.c} uses the same set of callbacks for every device
+it registers (as can be seen on line 33), each device could have
+different callbacks if desired.  (Not shown is the initialization of
+{\tt drums\_fops}, which assigns {\tt drums\_read} to be the {\tt
+read} callback.)
+
+If {\tt drums\_read} is called for all 6 types of drums, how does it
+know which device it's supposed to be servicing when it gets called?
+The answer is in the third argument of {\tt fusd\_register()}, which
+we were previously ignoring.  Whatever value is passed to {\tt
+fusd\_register()} will be passed back to the callback in the {\tt
+device\_info} field of the {\tt fusd\_file\_info} structure.  The name
+of the drum sound is passed to {\tt fusd\_register} on line 33, and
+later retrieved by the driver on line 12.
+
+Although this example uses a string as its {\tt device\_info}, the
+pointer can be used for anything---a mode number, a pointer to a
+configuration structure, and so on.
+
+
+\subsection{The difference between {\tt device\_info} and {\tt
+private\_data}}
+
+\label{private-data}
+
+As we mentioned in Section~\ref{fusd-file-info}, the {\tt
+fusd\_file\_info} structure has two seemingly similar fields, both of
+which can be used by drivers to store their own data: {\tt
+device\_info} and {\tt private\_data}.  However, there is an important
+difference between them:
+
+\begin{itemize}
+
+\item {\tt private\_data} is stored {\em per file descriptor}.  If 20
+processes open a FUSD device (or, one process opens a FUSD device 20
+times), each of those 20 file descriptors will have their own copy of
+{\tt private\_data} associated with them.  This field is therefore
+useful to drivers that need to differentiate multiple requests to a
+single device that might be serviced in parallel.  (Note that most
+UNIX variants, including Linux, do allow multiple processes to share a
+single file descriptor---specifically, if a process {\tt open}s a
+file, then {\tt fork}s.  In this case, processes will also share a
+single copy of {\tt private\_data}.)
+
+The first time a FUSD driver sees {\tt private\_data} (in the {\tt
+open} callback), it is guaranteed to be NULL.  Any changes to it by a
+driver callback will only affect the state associated with that single
+file descriptor.
+
+\item {\tt device\_info} is kept {\em per device}.  That is, {\em all}
+clients of a device share a {\em single} copy of {\tt device\_info}.
+Unlike {\tt private\_data}, which is always initialized to NULL, {\tt
+device\_info} is always initialized to whatever value the driver
+passed to {\tt fusd\_register} as described in the previous section.
+If a callback changes the copy of {\tt device\_info} in the {\tt
+fusd\_file\_info} structure, this has no effect; {\tt device\_info}
+can only be set at registration time, with {\tt fusd\_register}.
+
+\end{itemize}
+
+In short, {\tt device\_info} is used to differentiate {\em devices}.
+{\tt private\_data} is used to differentiate {\em users of those
+devices}.
+
+Program~\ref{drums2.c}, drums2.c, illustrates the difference between
+{\tt device\_info} and {\tt private\_data}.  Like the original
+drums.c, it creates a bunch of devices in {\tt /dev/drums/}, each of
+which ``plays'' a different sound.  However, it also does something
+new: keeps track of how many times each device has been opened.  Every
+read to any drum gives you the name of its sound as well as your
+unique ``user number''.  And, instead of returning just a single line
+(as drums.c did), it will keep generating more ``sound'' every time a
+{\tt read()} system call arrives.
+
+\begin{Program}
+\listinginput[5]{1}{drums2.c.example}
+\caption{drums2.c: Using both {\tt device\_info} and {\tt private\_data}}
+\label{drums2.c}
+\end{Program}
+
+The trick is that we want to keep users separate from each other.  For
+example, user one might type:\\
+\begin{minipage}{\textwidth}
+\vspace{\baselineskip}
+\begin{verbatim}
+% more /dev/drums/bam
+You are user 1 to hear a drum go 'bam'!
+You are user 1 to hear a drum go 'bam'!
+You are user 1 to hear a drum go 'bam'!
+...
+
+\end{verbatim}
+\end{minipage}
+
+Meanwhile, another user in a different shell might type the same
+command at the same time, and get different results:\\
+\begin{minipage}{\textwidth}
+\vspace{\baselineskip}
+\begin{verbatim}
+% more /dev/drums/bam
+You are user 2 to hear a drum go 'bam'!
+You are user 2 to hear a drum go 'bam'!
+You are user 2 to hear a drum go 'bam'!
+...
+
+\end{verbatim}
+\end{minipage}
+
+The idea is that no matter how long those two users go on reading
+their devices, the driver always generates a message that is specific
+to that user.  The two users' data are not intermingled.
+
+To implement this, Program~\ref{drums2.c} introduces a new {\tt
+drum\_info} structure (lines 1-4), which keeps track of both the
+drum's name, and the number of time each drum device has been opened.
+An instance of this structure, {\tt drums}, is initialized on lines
+4-8.  Note that the call to {\tt fusd\_register} (line 45) now passes
+a pointer to a {\tt drum\_info} structure.  (This {\tt drum\_info *}
+pointer is shared by every instance of a client that opens a
+particular type of drum.)
+
+Each time a drum device is opened, its {\tt drum\_info} structure is
+retrieved from {\tt device\_info} (line 15).  Then, on line 18, the
+{\tt num\_users} field is incremented and the new user number is
+stored in {\tt fusd\_file\_info}'s {\tt private\_data} field.  To
+reiterate our earlier point: {\em {\tt device\_info} contains
+information global to all users of a device, while {\tt private\_data}
+has information specific to a particular user of the device.}
+
+It's also worthwhile to note that when we increment {\tt num\_users}
+on line 18, a simple {\tt num\_users++} is correct.  If this was a
+driver inside the kernel, we'd have to use something like {\tt
+atomic\_inc()} because a plain {\tt i++} is not atomic.  Such a
+non-atomic statement will result in a race condition on SMP platforms,
+if an interrupt handler also touches {\tt num\_users}, or in some
+future Linux kernel that is preemptive.  Since this FUSD driver is
+just a plain, single-threaded user-space application, good old {\tt
+++} still works.
+
+
+\section{Writing {\tt ioctl} Callbacks}
+
+The POSIX API provides for a function called {\tt ioctl}, which allows
+``out-of-band'' configuration information to be passed to a device
+driver through a file descriptor.  Using FUSD, you can write a device
+driver with a callback to handle {\tt ioctl} requests from clients.
+For the most part, it's just like writing a callback for {\tt read} or
+{\tt write}, as we've seen in previous sections.  From the client's
+point of view, {\tt ioctl} traditionally takes three arguments: a file
+descriptor, a command number, and a pointer to any additional data
+that might be required for the command.
+
+\subsection{Using macros to generate {\tt ioctl} command numbers}
+
+The Linux header file {\tt /usr/include/asm/ioctl.h} defines macros
+that {\em must} be used to create the {\tt ioctl} command number.
+These macros take various combinations of three arguments:
+
+\begin{itemize}
+
+\item {\tt type}---an 8-bit integer selected to be specific to the
+device driver.  {\tt type} should be chosen so as not to conflict with
+other drivers that might be ``listening'' to the same file descriptor.
+(Inside the kernel, for example, the TCP and IP stacks use distinct
+numbers since an {\tt ioctl} sent to a socket file descriptor might be
+examined by both stacks.)
+
+\item {\tt number}---an 8-bit integer ``command number.''  Within a
+driver, distinct numbers should be chosen for each different kind of
+{\tt ioctl} command that the driver services.
+
+\item {\tt data\_type}---The name of a type used to compute how many
+bytes are exchanged between the client and the driver.  This argument
+is, for example, the name of a structure.
+
+\end{itemize}
+
+The macros used to generate command numbers are:
+
+\begin{itemize}
+
+\item {\tt \_IO(int type, int number)} -- used for a simple ioctl that
+sends nothing but the type and number, and receives back nothing but
+an (integer) retval.
+
+\item {\tt \_IOR(int type, int number, data\_type)} -- used for an
+ioctl that reads data {\em from} the device driver.  The driver will
+be allowed to return {\tt sizeof(data\_type)} bytes to the user.
+
+\item {\tt \_IOW(int type, int number, data\_type)} -- similar to
+\_IOR, but used to write data {\em to} the driver.
+
+\item {\tt \_IORW(int type, int number, data\_type)} -- a combination
+of {\tt \_IOR} and {\tt \_IOW}.  That is, data is both written to the
+driver and then read back from the driver by the client.
+\end{itemize}
+
+\begin{Program}
+\listinginput[5]{1}{ioctl.h.example}
+\caption{ioctl.h: Using the {\tt \_IO} macros to generate {\tt ioctl}
+command numbers}
+\label{ioctl.h}
+\end{Program}
+
+Program~\ref{ioctl.h} is an example header file showing the use of
+these macros.  In real programs, the client executing an ioctl and the
+driver that services it must share the same header file.
+
+\subsection{Example client calls and driver callbacks}
+
+Program~\ref{ioctl-client.c} shows a client program that executes {\tt
+ioctl}s using the ioctl command numbers defined in
+Program~\ref{ioctl.h}.  The {\tt ioctl\_data\_t} is
+application-specific; our simple test program defines it as a
+structure containing two arrays of characters.  The first {\tt ioctl}
+call (line 10) sends the command {\tt IOCTL\_TEST3}, which retrieves
+strings {\em from} the driver.  The second {\tt ioctl} uses the
+command {\tt IOCTL\_TEST4} (line 18), which sends strings {\em to} the
+driver.
+
+\begin{Program}
+\listinginput[5]{1}{ioctl-client.c.example}
+\caption{ioctl-client.c: A program that makes {\tt ioctl} requests on
+a file descriptor}
+\label{ioctl-client.c}
+\end{Program}
+
+The portion of the FUSD driver that services these calls is shown in
+Program~\ref{ioctl-server.c}.
+
+\begin{Program}
+\listinginput[5]{1}{ioctl-server.c.example}
+\caption{ioctl-server.c: A driver that handles {\tt ioctl} requests}
+\label{ioctl-server.c}
+\end{Program}
+
+The ioctl example header file and test programs shown in this document
+(Programs~\ref{ioctl.h}, \ref{ioctl-client.c}, and
+\ref{ioctl-server.c}) are actually contained in a larger, single
+example program included in the FUSD distribution called {\tt
+ioctl.c}.  That source code shows other variations on calling and
+servicing {\tt ioctl} commands.
+
+
+\section{Integrating FUSD With Your Application Using {\tt fusd\_dispatch()}}
+\label{selecting}
+
+The example applications we've seen so far have something in common:
+after initialization and device registration, they call {\tt
+fusd\_run()}.  This gives up control of the program's flow, turning it
+over to the FUSD library instead.  This worked fine for our simple
+example programs, but doesn't work in a real program that needs to
+wait for events other than FUSD callbacks.  For this reason, our
+framework provides another way to activate callbacks that does not
+require the driver to give up control of its {\tt main()}.
+
+\subsection{Using {\tt fusd\_dispatch()}}
+
+Recall from Section~\ref{using-fusd-register} that {\tt
+fusd\_register} returns a {\em file descriptor} for every device that
+is successfully registered.  This file descriptor can be used to
+activate device callbacks ``manually,'' without passing control of the
+application to {\tt fusd\_run()}.  Whenever the file descriptor
+becomes readable according to {\tt select(2)}, it should be passed to
+{\tt fusd\_dispatch()}, which in turn will activate callbacks in the
+same way that {\tt fusd\_run()} does.  In other words, an application
+can:
+\begin{enumerate}
+\item Save the file descriptors returned by {\tt fusd\_register()};
+\item Add those FUSD file descriptors to an {\tt fd\_set} that is
+passed to {\tt select}, along with any other file
+descriptors that might be interesting to the application; and
+\item Pass every FUSD file descriptor that {\tt select} indicates is
+readable to {\tt fusd\_dispatch}.
+\end{enumerate}
+
+{\tt fusd\_dispatch()} returns 0 if at least one callback was
+successfully activated.  On error, -1 is returned with {\tt errno} set
+appropriately.  {\tt fusd\_dispatch()} will never block---if no
+messages are available from the kernel, it will return -1 with {\tt
+errno} set to {\tt EAGAIN}.
+
+\subsection{Helper Functions for Constructing an {\tt fd\_set}}
+
+The FUSD library provides two (optional) utility functions that can
+make it easier to write applications that integrate FUSD into their
+own {\tt select()} loops.  Specifically:
+\begin{itemize}
+\item {\tt void fusd\_fdset\_add(fd\_set *set, int *max)}---is meant
+to help construct an {\tt fd\_set} that will be passed as the
+``readable fds'' set to select.  This function adds the file
+descriptors of all previously registered FUSD devices to the fd\_set
+{\tt set}.  It assumes that {\tt set} has already been initialized by
+the caller.  The integer {\tt max} is updated to reflect the largest
+file descriptor number in the set.  {\tt max} is not changed if the
+value passed to {\tt fusd\_fdset\_add} is already larger than the
+largest FUSD file descriptor added to the set.
+
+\item {\tt void fusd\_dispatch\_fdset(fd\_set *set)}---is meant to be
+called on the {\tt fd\_set} that is {\em returned} by select.  It
+assumes that {\tt set} contains a set file descriptors that {\tt
+select()} has indicated are readable.  {\tt fusd\_dispatch\_fdset()}
+calls {\tt fusd\_dispatch} on every descriptor in {\tt set} that is a
+valid FUSD descriptor.  Non-FUSD descriptors in {\tt set} are
+ignored.
+\end{itemize}
+
+
+\begin{Program}
+\listinginput[5]{1}{drums3.c.example}
+\caption{drums3.c: Waiting for both FUSD and non-FUSD events in a
+{\tt select} loop}
+\label{drums3.c}
+\end{Program}
+
+The excerpt of {\tt drums3.c} shown in Program~\ref{drums3.c}
+demonstrates the use of these helper functions.  This program is
+similar to the earlier drums.c example: it creates a number of musical
+instruments such as {\tt /dev/drums/bam} and {\tt /dev/drums/boom}.
+However, in addition to servicing its musical callbacks, the driver
+also prints a prompt to standard input asking how ``loud'' the drums
+should be.  Instead of turning control of {\tt main()} over to {\tt
+fusd\_run()} as in the previous examples, {\tt drums3} uses {\tt
+select()} to simultaneously watch its FUSD file descriptors and standard
+input.  It responds to input from both sources.
+
+On lines 2--5, an {\tt fd\_set} and its associated ``max'' value are
+initialized to contain stdin's file descriptor.  On line 9, we use
+{\tt fusd\_fdset\_add} to add the FUSD file descriptors for all
+registered devices.  (Not shown in this excerpt is the device
+registration, which is the same as the registration code we saw in
+{\tt drums.c}.)  On line 13 we call select, which blocks until one of
+the fd's in the set is readable.  On lines 17 and 18, we check to see
+if standard input is readable; if so, a function is called which reads
+the user's response from standard input and prints a new prompt.
+Finally, on line 21, we call {\tt fusd\_dispatch\_fdset}, which in
+turn will activate the callbacks for devices that have pending system
+calls waiting to be serviced.
+
+It's worth reiterating that drivers are not required to use the FUSD
+helper functions {\tt fusd\_fdset\_add} and {\tt
+fusd\_dispatch\_fdset}.  If it's more convenient, a driver can
+manually save all of the file descriptors returned by {\tt
+fusd\_register}, construct its own {\tt fd\_set}, and then call {\tt
+fusd\_dispatch} on each descriptor that is readable.  This method is
+sometimes required for integration with other frameworks that want to
+take over your {\tt main()}.  For example, the 
+\htmladdnormallinkfoot{GTK user interface
+framework}{http://www.gtk.org} is event-driven and requires that you
+pass control of your {\tt main} to it.  However, it does allow you to
+give it a file descriptor and a function pointer, saying ``Call this
+callback when {\tt select} indicates this file descriptor has become
+readable.''  A GTK application that implements FUSD devices can work
+by giving GTK all the FUSD file descriptors individually, and calling
+{\tt fusd\_dispatch()} when GTK calls the associated callbacks.
+
+
+
+\section{Implementing Blocking System Calls}
+
+All of the example drivers that we've seen until now have had an
+important feature missing: they never had to {\em wait} for anything.
+So far, a driver's response to a system call has always been
+immediately available---allowing the driver to response immediately.
+However, real devices are often not that lucky: they usually have to
+wait for something to happen before completing a client's system call.
+For example, a driver might be waiting for data to arrive from the
+serial port or over the network, or even waiting for a user action.
+
+In situations like this, a basic capability most device drivers must
+have is the ability to {\em block} the caller.  Blocking operations
+are important because they provide a simple interface to user programs
+that does flow control, rather than something more expensive like
+continuous polling.  For example, user programs expect to be able to
+execute a statement like {\tt read(fd, buf, sizeof(buf))}, and expect
+the read call to block (stop the flow of the calling program) until
+data is available.  This is much simpler and more efficient than
+polling repeatedly.
+
+In the following sections, we'll describe how to block and unblock
+system calls for devices that use FUSD.
+
+
+\subsection{Blocking the caller by blocking the driver}
+
+The easiest (but least useful) way to block a client's system call is
+simply to block the driver, too.  For example, consider
+Program~\ref{console-read.c}, which implements a device called {\tt
+/dev/console-read}.  Whenever a process tries to read from this
+device, the driver prints a prompt to standard input, asking for a
+reply.  (The prompt appears in the shell the driver was run in, not
+the shell that's trying to read from the device.)  When the user
+enters a line of text, the response is returned to the client that did
+the original {\tt read()}.  By blocking the driver waiting for the
+reply, the client that issued the system call is blocked as well.
+
+\begin{Program}
+\listinginput[5]{1}{console-read.c.example}
+\caption{console-read.c: A simple blocking system call}
+\label{console-read.c}
+\end{Program}
+
+Blocking the driver this way is safe---unlike programming in the
+kernel proper, where doing something like this would block the entire
+system.  It's also easy to implement, as seen from the example above.
+However, it makes the driver unresponsive to system call requests that
+might be coming from other clients.  If another process tries to do
+anything at all with a blocked driver's device---even an {\tt
+open()}---it will block until the driver wakes up again.  This
+limitation makes blocking drivers inappropriate for any device driver
+that expects to service more than one client at a time.
+
+
+\subsection{Blocking the caller using {\tt -FUSD\_NOREPLY};
+unblocking it using {\tt fusd\_return()}}
+\label{fusd-noreply}
+
+If a device driver expects more than one client at a time---as is
+often the case---a slightly different programming model is needed for
+system calls that can potentially block.  Instead of blocking, the
+driver immediately sends a message to the FUSD framework that says, in
+essence, ``Don't unblock the client that issued this system call, but
+continue sending additional system call requests that might be coming
+from other clients.''  Driver callbacks can send this message to FUSD
+by returning the special value {\tt -FUSD\_NOREPLY} instead of a
+normal system call return value.
+
+Before a callback blocks the caller by returning {\tt -FUSD\_NOREPLY},
+it must save the {\tt fusd\_file\_info} pointer that was provided to
+the callback as its first argument.  Later, when an event occurs which
+allows the client's blocked system call to complete, the driver should
+call {\tt fusd\_return()}, which will unblock the calling process and
+complete its system call.  {\tt fusd\_return()} takes two arguments:
+\begin{itemize}
+\item The {\tt fusd\_file\_info} pointer that the callback saved
+earlier; and
+\item The system call's return value (in other words, the value that
+would have been returned by the callback function had it not returned
+{\tt -FUSD\_NOREPLY}).  FUSD itself {\em does not} examine the return
+value passed as the second argument to {\tt fusd\_return}; it simply
+propagates that value back to the kernel as the return value of the
+blocked system call.
+\end{itemize}
+
+Drivers should never call {\tt fusd\_return} more than once on a
+single {\tt fusd\_file\_info} pointer.  Doing so will have undefined
+results, similar to calling {\tt free()} twice on the same pointer.
+
+It also bears repeating that a callback can call {\em either} call
+fusd\_return() explicitly {\em or} return a normal return value (i.e.,
+not {\tt -FUSD\_NOREPLY}), but not both.
+
+{\tt -FUSD\_NOREPLY} and {\tt fusd\_return()} make it easy for a
+driver to block a process, then unblock it later when data becomes
+available.  When the callback returns {\tt -FUSD\_NOREPLY}, the driver
+is freed up to wait for other events, even though the process making
+the system call is still blocked.  The driver can then wait for
+something to happen that unblocks the original caller---for example,
+another FUSD event, data from a serial port, or data from the network.
+(Recall from Section~\ref{selecting} that a FUSD driver can
+simultaneously wait for both FUSD and non-FUSD events.)
+
+FUSD includes an example program, {\tt pager.c}, which demonstrates
+these techniques.  The pager driver implements a simple notification
+interface which lets any number of ``waiters'' wait for a signal from
+a ``notifier.''  All the waiters wait by trying to read from {\tt
+/dev/pager/notify}.  Those reads will block until a notifier writes
+the string {\tt page} to {\tt /dev/pager/input}.  It's easy to try
+the application out---run the driver, and then open three other
+shells.  In two of them, type {\tt cat /dev/pager/notify}.  The reads
+will block.  Then, in the third shell, type {\tt echo page >
+/dev/pager/input}---the other two shells should become unblocked.
+
+Let's take a look at how this application is implemented, step by
+step.
+
+\subsubsection{Keeping Per-Client State}
+
+The first thing to notice about {\tt pager.c} is that it keeps {\em
+per-client state}.  That is, for every file descriptor open to the
+driver, a structure is allocated that has information relating to that
+file descriptor.  Previous driver examples were, for the most part,
+{\em reactive}---they received requests, and immediately generated
+responses.  Since there was never more than one request outstanding,
+there was no need to keep a list of them.  The pager application is
+the first one that must keep track of an arbitrary number of requests
+that might be outstanding at the same time.  The first excerpt of {\tt
+pager.c}, which appears in Program~\ref{pager-open.c}, shows the code
+which creates this per-client state.  Lines 1--6 define a structure,
+{\tt pager\_client}, which keeps all the information we need about
+each client attached to the driver.  The {\tt open} callback for {\tt
+/dev/pager/notify}, shown on lines 12--31, allocates memory for an
+instance of this structure and adds it to a linked list.  (If the
+memory allocation fails, an error is returned to the client on line
+18; this will prevent the file from opening.)  Note on line 25 that we
+use the {\tt private\_data} field to store a pointer to the client
+state; this allows the structure to be retrieved when later callbacks
+on this file descriptor arrive.  The memory is deallocated when the
+file is closed; we'll see that in a later section.
+
+\begin{Program}
+\listinginput[5]{1}{pager-open.c.example}
+\caption{pager.c (Part 1): Creating state for every client using the
+driver}
+\label{pager-open.c}
+\end{Program}
+
+Another thing to notice about the open callback is the use of the {\tt
+last\_page\_seen} variable.  The driver gives a sequence number to
+every page it receives; {\tt last\_page\_seen} stores the number of
+the most recent page seen by a client.  When a new client arrives
+(i.e., it opens {\tt /dev/pager/notify}), its {\tt last\_page\_seen}
+state is set equal to the page that has most recently arrived; this
+forces a new client to wait for the {\em next} page, rather than
+immediately being notified of a page that has arrived in the past.
+
+\subsubsection{Blocking and completing reads}
+
+The next part of {\tt pager.c} is shown in Program~\ref{pager-read.c}.
+The {\tt pager\_notify\_read} function seen on line 1 is registered as
+the {\tt read} callback for the {\tt /dev/pager/notify} device.  It
+blocks the read request using the technique we described earlier: it
+stores the {\tt fusd\_file\_info} pointer in that client's state
+structure, and returns {\tt -FUSD\_NOREPLY}.  (Note that the pointer
+to the client's state structure comes from the {\tt private\_data}
+field of {\tt fusd\_file\_info}, where the open callback stored it.)
+
+\begin{Program}
+\listinginput[5]{1}{pager-read.c.example}
+\caption{pager.c (Part 2): Block clients' {\tt read} requests, and later
+completing the blocked reads}
+\label{pager-read.c}
+\end{Program}
+
+
+{\tt pager\_notify\_complete\_read} {\em unblocks} previously blocked
+reads.  This function first checks to see that there is, in fact, a blocked
+read (line 19).  It then checks to see if a page has arrived that the
+client hasn't seen yet (line 23).  Finally, it updates the client
+state and unblocks the blocked read by calling {\tt fusd\_return}.
+Note the second argument to {\tt fusd\_return} is a 0; as we
+saw in Section~\ref{read-callback}, a 0 return value to a {\tt read}
+system call means EOF.  (The system call will be unblocked regardless
+of the return value.)
+
+{\tt pager\_notify\_complete\_read} is called every time a new page
+arrives.  New pages are processed by {\tt pager\_input\_write} (line
+34), which is the {\tt write} callback for {\tt /dev/pager/input}.
+After recording the fact that a new page has arrived, it calls {\tt
+pager\_notify\_complete\_read} for each client that has an open file
+descriptor.  This will complete the reads of any clients who have not
+yet seen this new data, and have no effect on clients that don't have
+outstanding reads.
+
+There is another interesting point to notice about {\tt
+pager\_notify\_read}.  On line 12, after it stores the blocked system
+call's pointer, but before we return {\tt -FUSD\_NOREPLY}, it calls
+the completion function.  This has the effect of returning any data
+that might already be available back to the caller immediately.  If
+that happens, we will end up calling {\tt fusd\_return} {\em before}
+we return {\tt -FUSD\_NOREPLY}.  This probably seems strange, but it's
+legal.  Recall that a callback can call fusd\_return() explicitly {\em
+or} return a normal (not {\tt -FUSD\_NOREPLY}) return value, but not
+both; the order doesn't matter.
+
+\subsubsection{Using {\tt fusd\_destroy()} to clean up client state}
+\label{fusd-destroy}
+
+Finally, let's take a look at one last aspect of the pager program:
+how it cleans up the per-client state when a client leaves.  This is
+mostly straightforward, with one exception: a client may have an
+outstanding read request out when a close request comes in.  Normally,
+a client can't make another system call request while a previous
+system call is still blocked.  However, the {\tt close} system call is
+an exception: it gets called when a client dies (for example, if it
+receives an interrupt signal).  If a {\tt close} comes in while
+another system call is still outstanding, the state associated with
+the outstanding request should be freed to avoid a memory leak.  The
+{\tt fusd\_destroy} function is used to do this, seen on linen 12-14
+of Program~\ref{pager-close.c}.
+
+\begin{Program}
+\listinginput[5]{1}{pager-close.c.example}
+\caption{pager.c (Part 3): Cleaning up when a client leaves}
+\label{pager-close.c}
+\end{Program}
+
+
+\subsection{Retrieving a blocked system call's arguments from a {\tt
+fusd\_file\_info} pointer}
+
+\label{logring}
+
+In the previous section, we showed how the {\tt fusd\_return} function
+can be used to specify the return value of a system call that was
+previously blocked.  However, many system calls have side effects in
+addition to returning a value---for example, in a {\tt read()}
+request, the data being returned has to be copied into the caller's
+buffer.  To facilitate this, FUSD provides accessor functions that let
+drivers retrieve the arguments that had been passed to its callbacks
+at the time the call was originally issued.  For example, the {\tt
+fusd\_get\_read\_buffer()} function will return a pointer to the data
+buffer that is provided with {\tt read()} callbacks.  Drivers can use
+these accessor functions to affect change to a client {\em before}
+calling {\tt fusd\_return()}.
+
+The following accessor functions are available, all of which take a
+single {\tt fusd\_file\_info *} argument:
+\begin{itemize}
+\item {\tt int char *fusd\_get\_read\_buffer}---The destination buffer
+for data that a driver is returning to a process doing a {\tt read()}.
+\item {\tt const char *fusd\_get\_write\_buffer}---The source buffer
+containing data sent to the driver by a process doing a {\tt write()}.
+\item {\tt fusd\_get\_length}---The length (in bytes) of the buffer
+for either a {\tt read()} or a {\tt write()}.
+\item {\tt loff\_t fusd\_get\_offset}---The file descriptor's byte
+offset, typically used in {\tt read()} and {\tt write()} callbacks.
+\item {\tt int fusd\_get\_ioctl\_request}---An ioctl's request
+``command number'' (i.e., the first argument of an ioctl).
+\item {\tt int fusd\_get\_ioctl\_arg}---The second argument of an
+ioctl for non-data-bearing {\tt ioctl} requests (i.e., {\tt \_IO}
+commands).
+\item {\tt void *fusd\_get\_ioctl\_buffer}---The data buffer for
+data-bearing {\tt ioctl} requests ({\tt \_IOR}, {\tt \_IOW}, and
+{\tt \_IORW} commands).
+\item {\tt int fusd\_get\_poll\_diff\_cached\_state}---See
+Section~\ref{selectable}.
+\end{itemize}
+
+We got away without using these accessor functions in our {\tt
+pager.c} example because the pager doesn't actually return data---it
+just blocks and unblocks {\tt read} calls.  However, the FUSD
+distribution contains another example program, {\tt logring}, that
+demonstrates their use.
+
+{\tt logring} makes it easy to access the most recent (and only the most
+recent) output from a process. It works just like {\tt tail -f} on a
+log file, except that the storage required never grows. This can be
+useful in embedded systems where there isn't enough memory or disk
+space for keeping complete log files, but the most recent debugging
+messages are sometimes needed (e.g., after an error is observed).
+
+{\tt logring} uses FUSD to implement a character device, {\tt
+/dev/logring}, that acts like a named pipe that has a finite, circular
+buffer.  The size of the buffer is given as a command-line argument.
+As more data is written into the buffer, the oldest data is discarded.
+A process that reads from the logring device will first read the
+existing buffer, then block and see new data as it's written, similar
+to monitoring a log file using {\tt tail -f}.
+
+You can run this example program by typing {\tt logring <logsize>},
+where {\tt logsize} is the size of the circular buffer in bytes.
+Then, type {\tt cat /dev/logring} in a shell.  The {\tt cat} process
+will block, waiting for data.  From another shell, write to the
+logring (e.g., {\tt echo Hi there > /dev/logring}).  The {\tt cat}
+process will see the message appear.
+
+(This example program is based on {\em emlog}, a (real) Linux kernel
+module with identical functionality.  If you find logring useful, but
+want to use it on a system that does not have FUSD, check out the
+original
+\htmladdnormallinkfoot{emlog}{http://www.circlemud.org/jelson/software/emlog}.)
+
+
+
+
+
+\section{Implementing {\tt select}able Devices}
+\label{selectable}
+
+One important feature that almost every device driver in a system
+should have is support for the {\tt select(2)} system call.  {\tt
+select} allows clients to assemble a set of file descriptors and ask
+to be notified when one of them becomes readable or writable.  This
+simple feature is deceptively powerful---it allows clients to wait for
+any number of a set of possible events to occur.  This is
+fundamentally different than (for example) a blocking read, which only
+unblocks on one kind of event.  In this section, we'll describe how
+FUSD can be used to create a device whose state can be queried by a
+client's call to {\tt select(2)}.
+
+This section is limited to a discussion what a FUSD driver writer
+needs to know to implement a selectable device.  Details of the FUSD
+implementation required to support this feature are described in
+Section~\ref{poll-diff-implementation}
+
+
+\subsection{Poll state and the {\tt poll\_diff} callback}
+
+FUSD's implementation of selectable devices depends on the concept of
+{\em poll state}.  A file descriptor's poll state is a bitmask that
+describes its current properties---readable, writable, or exception
+raised.  These three states correspond to {\tt select(2)}'s three
+{\tt fd\_set}s.  FUSD has constants used to describe these states:
+\begin{itemize}
+\item {\tt FUSD\_NOTIFY\_INPUT}---Input is available; a read will not
+block.
+\item {\tt FUSD\_NOTIFY\_OUTPUT}---Output space is available; a write
+will not block.
+\item {\tt FUSD\_NOTIFY\_EXCEPT}---An exception has occurred.
+\end{itemize}
+
+These constants can be combined with C's bitwise-or operator.  For
+example, a descriptor that is both readable and writable is expressed
+as {\tt FUSD\_NOTIFY\_INPUT | FUSD\_NOTIFY\_OUTPUT}.  0 means a file
+descriptor is not readable, not writable, and not in the exception
+set.
+
+For a FUSD device to be selectable, its driver must implement a
+callback called {\tt poll\_diff}.  This callback is very different
+than the others; it is not a ``direct line'' between the client and
+the driver as is the case with a call such as {\tt ioctl}.  A driver's
+response to {\tt poll\_diff} is {\em not} the return value seen by a
+client's call to {\tt select}.  When a client tries to {\tt select} on
+a set of file descriptors, the kernel collects the responses from all
+the appropriate callbacks---{\tt poll} for file descriptors managed by
+kernel drivers, and {\tt poll\_diff} callbacks those managed by FUSD
+drivers---and synthesizes all of that information into the return
+value seen by the client.
+
+FUSD keeps a cache of the poll state it has most recently received
+from each FUSD device driver, initially assumed to be 0.  This state
+is returned to clients trying to {\tt select()} on devices managed by
+those drivers.  Under certain conditions, FUSD sends a query to the
+driver in order to ensure that the kernel's poll state cache is up to
+date.  This query takes the form of a {\tt poll\_diff} callback
+activation, which is given a single argument: the poll state that FUSD
+currently has cached.  The driver should consult its internal data
+structures to determine the actual, current poll state (i.e., whether
+or not buffers have readable data).  Then:
+\begin{itemize}
+\item If the FUSD cache is incorrect (that is, the current true poll
+state is different than FUSD's cached state), the current poll state
+should be returned immediately.
+\item If the FUSD cache is up to date (that is, it matches the real
+current state), the callback should save the {\tt fusd\_file\_info}
+pointer and return {\tt -FUSD\_NOREPLY}.  Later, when the poll
+state changes, the driver can call {\tt fusd\_return()} to update
+FUSD's cache.
+\end{itemize}
+
+In other words, when a driver's {\tt poll\_diff} callback is
+activated, the kernel is effectively saying to the driver, ``Here is
+what I think the current poll state of this file descriptor is; let me
+know when that state {\em changes}.''  The driver can either respond
+immediately (if the kernel's cache is already known to be out of
+date), or return {\tt -FUSD\_NOREPLY} if no update is immediately
+necessary.  Later, when the poll state changes (for example, if new
+data arrives that makes a device readable), the driver can used its
+saved {\tt fusd\_file\_info} pointer to send a poll state update to
+the kernel.
+
+When a FUSD driver sends a poll state update, it might (or might not)
+have the effect of waking up a client that was blocked in {\tt
+select(2)}.  On the same note, it's worth reiterating that a {\tt
+-FUSD\_NOREPLY} response to a {\tt poll\_diff} callback {\em does not}
+necessarily block the client---other descriptors in the client's {\tt
+select} set might be readable, for example.
+
+\subsection{Receiving a {\tt poll\_diff} request when the previous one
+has not been returned yet}
+\label{multiple-polldiffs}
+
+Calls such as {\tt read} and {\tt write} are synchronous from the
+standpoint of an individual client---a request is made, and the
+requester blocks until a reply is received.  This means that there
+can't ever be more than a single {\tt read} request outstanding for a
+single client at a time.  (The driver as a whole may be keeping track
+of many outstanding {\tt read} requests in parallel, but no two of them will
+be from the same client file descriptor.)
+
+As we mentioned in the previous section, the {\tt poll\_diff} callback
+is different from other callbacks.  It is not part of a synchronous
+request/reply sequence that causes the client to block.  It is also an
+interface to the {\em kernel}, not directly to the client.  So, it
+{\em is} possible to receive a {\tt poll\_diff} request while there is
+already one outstanding.  This happens if the kernel's poll state
+cache changes, causing it to notify the driver that it has a new
+cached value.
+
+This is easy to handle; the client should simply
+\begin{enumerate}
+\item Destroy the old (now out-of-date) {\tt poll\_diff} request
+using the {\tt fusd\_destroy} function we saw in
+Section~\ref{fusd-destroy}.
+\item Either respond to or save the new {\tt poll\_diff} request,
+exactly as described in the previous section.
+\end{enumerate}
+
+The next section will show an example of this technique.
+
+
+\subsection{Adding {\tt select} support to {\tt pager.c}}
+
+Given the explanation of {\tt poll\_diff} in the previous sections, it
+might seem that implementing a selectable device is a daunting task.
+It's actually not as bad as it sounds---the example code may well be
+shorter than its explanation!
+
+\begin{Program}
+\listinginput[5]{1}{pager-polldiff.c.example}
+\caption{pager.c (Part 4): Supporting {\tt select(2)} by implementing a
+{\tt poll\_diff} callback}
+\label{pager-polldiff.c}
+\end{Program}
+
+Program~\ref{pager-polldiff.c} shows the implementation of {\tt
+poll\_diff} in {\tt pager.c}, which makes its notification interface
+({\tt /dev/pager/notify}) selectable.  It is decomposed into a ``top
+half'' and ``bottom half'' function, exactly as we did for the
+blocking {\tt read} implementation in Program~\ref{pager-read.c}.
+First, on lines 1--20, we see the the callback for {\tt poll\_diff}
+callback itself.  It is virtually identical to the {\tt read} callback
+in Program~\ref{pager-read.c}.  The main difference is that it first
+checks (on line 12) to see if a {\tt poll\_diff} request is already
+outstanding when a new request comes in.  If so, the out-of-date
+request is destroyed using {\tt fusd\_destroy}, as we described in
+Section~\ref{multiple-polldiffs}.
+
+The bottom half is shown on lines 22-46.  First, on lines 32--35, it
+computes the current poll state---if a page has arrived that the
+client hasn't seen yet, the file is readable; otherwise, it isn't.
+Next, the driver compares the current poll state with the poll state
+that the kernel has cached.  If the kernel's cache is out of date, the
+current state is returned to the kernel.  Otherwise, it does nothing.
+
+As with the {\tt read} callback we saw previously, notice that {\tt
+pager\_notify\_complete\_polldiff} is called in two different cases:
+\begin{enumerate}
+\item It is called immediately from the {\tt pager\_notify\_polldiff}
+callback itself.  This causes the current poll state to be returned to
+the kernel immediately when the request arrives if the driver already
+knows the kernel's state needs to be updated.
+\item It is called when new data arrives that causes the poll state to
+change.  Refer back to Program~\ref{pager-read.c} on
+page~\pageref{pager-read.c}; in the callback that receives new pages,
+notice on line 45 that the {\tt poll\_diff} completion function is called
+alongside the {\tt read} completion function.
+\end{enumerate}
+
+With this {\tt poll\_diff} implementation, it is possible for a client
+to open {\tt /dev/pager/notify}, and block in a {\tt select(2)} system
+call.  If another client writes {\tt page} to {\tt /dev/pager/input},
+the first client's {\tt select} will unblock, indicating the file has
+become readable.
+
+For additional example code, take a look at the {\tt logring} example
+program we first mentioned in Section~\ref{logring}.  It also supports
+{\tt select} by implementing a similar {\tt poll\_diff} callback.
+
+\section{Performance of User-Space Devices}
+\label{performance}
+
+This section hasn't been written yet.  I have some pretty graphs and
+whatnot, but no time to write about them here before the release.
+
+\section{FUSD Implementation Notes}
+
+In this section, we describe some of the details of how FUSD is
+implemented.  It's not necessary to understand these details in order
+to use FUSD.  However, these notes can be useful for people who are
+trying to understand the FUSD framework itself---hackers, debuggers,
+or the generally curious.
+
+\subsection{The situation with {\tt poll\_diff}}
+\label{poll-diff-implementation}
+
+
+In-kernel device drivers support select by implementing a callback
+called {\tt poll}.  This driver's callback is supposed to do two
+things.  First, it should return the current state of a file
+descriptor---a combination of being readable, writable, or having
+exceptions.  Second, it should provide a pointer to one of the
+driver's internal wait queues that will be awakened whenever the state
+changes.  The {\tt poll} call itself should never block---it should
+just instantaneously report what the {\em current} state is.
+
+FUSD's implementation of selectable devices is different, but attempts
+to maintain three properties that we thought to be most important from
+the point of view of a client using {\tt select}.  Specifically:
+\begin{enumerate}
+\item The {\tt select(2)} call itself should never become blocked.
+For example, if one file descriptor in its set isn't readable, that
+shouldn't prevent it from reporting other file descriptors that are.
+\item If {\tt select(2)} indicates a file descriptor is readable (or
+writable), a read (or write) on that file descriptor shouldn't block.
+\item Clients should be allowed to seamlessly {\tt select} on any set
+of file descriptors, even if that set contains a mix of both FUSD and
+non-FUSD devices.
+\end{enumerate}
+
+
+The FUSD kernel module keeps a cache of the driver's most recent
+answer for each file descriptor, initially assumed to be 0.  When the
+kernel module's internal {\tt poll} callback is activated, it:
+\begin{enumerate}
+\item Dispatches a {\em non-}blocking {\tt poll\_diff} to the
+associated user-space driver, asking for a cache update---if and only
+if there isn't already an outstanding poll diff request out that has
+the same value.
+\item Immediately returns the cached value to the kernel
+\end{enumerate}
+
+In addition, the cached value's readable bit is cleared on every read;
+the writable bit is cleared on every write.  This is necessary to
+prevent old poll state---which says ``device is readable''---from
+being returned out of the cache when it might be invalid.  FUSD
+assumes that any read to a device can make it potentially unreadable.
+This mechanism is what causes an updated poll diff to be sent to a
+client before the previous one has been returned.
+
+(this section isn't finished yet; fancy time diagrams coming someday)
+
+\subsection{Restartable System Calls}
+
+No time to write this section yet...
+
+
+\appendix
+
+\section{Using {\tt strace}}
+\label{strace}
+
+This section hasn't been written yet.  Contributions are welcome.
+
+\end{document}
+
