@@ -23,16 +23,19 @@ export
 
 ####################################################
 
-SUBDIRS = kfusd libfusd
+SUBDIRS = kfusd libfusd examples
 
 default: 
 	$(MAKE) -C libfusd 
 	$(MAKE) -C kfusd
+	$(MAKE) -C examples
 
 install:
 	$(MAKE) -C libfusd install
 	$(MAKE) -C kfusd install
+	$(MAKE) -C examples install
 
 clean:
 	$(MAKE) -C kfusd clean
 	$(MAKE) -C libfusd clean
+	$(MAKE) -C examples clean
