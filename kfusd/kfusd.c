@@ -37,6 +37,7 @@
  * Jeremy Elson  <jelson@circlemud.org>
  * Copyright (c) 2001, Sensoria Corporation
  * Copyright (c) 2002-2003, Regents of the University of California
+ * Copyright (c) 2007 Monty and Xiph.Org
  *
  * $Id$
  */
@@ -127,14 +128,25 @@
 
 #endif
 
+static inline struct kobject * to_kobj(struct dentry * dentry)
+{
+  struct sysfs_dirent * sd = dentry->d_fsdata;
+  if(sd)
+    return ((struct kobject *) sd->s_element);
+  else
+    return NULL;
+}
+
+#define to_class(obj) container_of(obj, struct class, subsys.kset.kobj)
+
 /**************************************************************************/
 
 #include "fusd.h"
 #include "fusd_msg.h"
 #include "kfusd.h"
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,0)
-# error "***FUSD doesn't work before Linux Kernel v2.6.0"
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,13)
+# error "***FUSD doesn't work before Linux Kernel v2.6.13"
 #endif
 
 STATIC struct cdev* fusd_control_device;
@@ -1908,6 +1920,11 @@ STATIC int fusd_polldiff_reply(fusd_dev_t *fusd_dev, fusd_msg_t *msg)
   return 0;
 }
 
+STATIC int systest (struct super_block *sb,void *data){
+  return 1;
+
+}
+
 STATIC int fusd_register_device(fusd_dev_t *fusd_dev,
 				register_msg_t register_msg)
 {
@@ -1920,10 +1937,6 @@ STATIC int fusd_register_device(fusd_dev_t *fusd_dev,
     RDEBUG(0, "fusd_register_device: bug in arguments!");
     return -EINVAL;
   }
-
-  /* user can only register one device per instance */
-//  if (fusd_dev->handle != 0)
-//    return -EBUSY;
 
   register_msg.name[FUSD_MAX_NAME_LENGTH] = '\0';
 
@@ -1958,83 +1971,143 @@ STATIC int fusd_register_device(fusd_dev_t *fusd_dev,
      return -ENOMEM;
   }
 	
-	strcpy(fusd_dev->class_name, register_msg.clazz);
+  strcpy(fusd_dev->class_name, register_msg.clazz);
 	
   /* allocate memory for the class name, and copy */
   if ((fusd_dev->dev_name = KMALLOC(strlen(register_msg.devname)+1, GFP_KERNEL)) == NULL) {
      RDEBUG(1, "yikes!  kernel can't allocate memory");
      return -ENOMEM;
   }
-	
-	strcpy(fusd_dev->dev_name, register_msg.devname);
+  
+  strcpy(fusd_dev->dev_name, register_msg.devname);
+  
+  dev_id = 0;
+  
+  if((error = alloc_chrdev_region(&dev_id, 0, 1, fusd_dev->name)) < 0)
+    {
+      printk(KERN_ERR "alloc_chrdev_region failed status: %d\n", error);
+      goto register_failed;
+    }
+  
+  fusd_dev->dev_id = dev_id;
+  
+  fusd_dev->handle = cdev_alloc();
+  if(fusd_dev->handle == NULL)
+    {
+      printk(KERN_ERR "cdev_alloc() failed\n");
+      error = -ENOMEM;
+      goto register_failed3;
+    }
+  
+  fusd_dev->handle->owner = THIS_MODULE;
+  fusd_dev->handle->ops = &fusd_client_fops;
+  
+  kobject_set_name(&fusd_dev->handle->kobj, fusd_dev->name);
+  
+  if((error = cdev_add(fusd_dev->handle, dev_id, 1)) < 0)
+    {
+      printk(KERN_ERR "cdev_add failed status: %d\n", error);
+      kobject_put(&fusd_dev->handle->kobj);
+      goto register_failed3;
+    }
 
-	dev_id = 0;
+  /* look up class in sysfs */
 
-	if((error = alloc_chrdev_region(&dev_id, 0, 1, fusd_dev->name)) < 0)
-	{
-		printk(KERN_ERR "alloc_chrdev_region failed status: %d\n", error);
-		goto register_failed;
+  {
+    struct CLASS *sys_class = NULL;
+    struct file_system_type *sysfs = get_fs_type("sysfs");
+    struct dentry *classdir = NULL;
+    struct dentry *classdir2 = NULL;
+    struct super_block *sb = NULL;
+ 
+    if(sysfs){      
+      sb = sget (sysfs, systest, NULL,NULL);
+      
+      /* because put_filesystem isn't exported */
+      module_put(sysfs->owner);
+
+      if(sb){
+	struct dentry *root = sb->s_root;
+
+	if(root){
+	  struct qstr name;
+
+	  name.name = "class";
+	  name.len = 5;
+	  name.hash = full_name_hash(name.name, name.len);
+	  classdir = d_lookup(root, &name);
+	      
+	  if(classdir){
+	    name.name = register_msg.clazz;
+	    name.len = strlen(name.name);
+	    name.hash = full_name_hash(name.name, name.len);
+	    classdir2 = d_lookup(classdir, &name);
+	    
+	    if(classdir2){
+	      // jackpot.  extract the class.
+	      struct kobject *ko = to_kobj(classdir2);
+	      sys_class = (ko?to_class(ko):NULL);
+
+	      if(!sys_class)
+		RDEBUG(2, "WARNING: sysfs entry for %s has no kobject!\n",register_msg.clazz);
+	    }
+	  }else{
+	    RDEBUG(2, "WARNING: sysfs does not list a class directory!\n");
+	  }
+	}else{
+	  RDEBUG(2, "WARNING: unable to access root firectory in sysfs!\n");
 	}
-
-	fusd_dev->dev_id = dev_id;
-
-	fusd_dev->handle = cdev_alloc();
-	if(fusd_dev->handle == NULL)
+      }else{
+	RDEBUG(2, "WARNING: unable to access superblock for sysfs!\n");
+      }
+    }else{
+      RDEBUG(2, "WARNING: sysfs not mounted or unavailable!\n");
+    }
+    
+    if(sys_class){
+      RDEBUG(3, "Found entry for class '%s' in sysfs\n",register_msg.clazz);
+      fusd_dev->clazz = sound_class;
+      fusd_dev->owns_class = 0;
+    }else{
+      RDEBUG(3, "Sysfs has no entry for '%s'; registering new class\n",register_msg.clazz);
+      fusd_dev->clazz = class_create(THIS_MODULE, fusd_dev->class_name);
+      if(IS_ERR(fusd_dev->clazz))
 	{
-		printk(KERN_ERR "cdev_alloc() failed\n");
-		error = -ENOMEM;
-		goto register_failed3;
+	  error = PTR_ERR(fusd_dev->clazz);
+	  printk(KERN_ERR "class_create failed status: %d\n", error);
+	  goto register_failed4;
 	}
+      fusd_dev->owns_class = 1;
+    }
 
-	fusd_dev->handle->owner = THIS_MODULE;
-	fusd_dev->handle->ops = &fusd_client_fops;
-
-	kobject_set_name(&fusd_dev->handle->kobj, fusd_dev->name);
-
-	if((error = cdev_add(fusd_dev->handle, dev_id, 1)) < 0)
-	{
-		printk(KERN_ERR "cdev_add failed status: %d\n", error);
-		kobject_put(&fusd_dev->handle->kobj);
-		goto register_failed3;
-	}
-
-	// Hack to add my class to the sound class
-	if(strcmp("sound", register_msg.clazz) == 0)
-	{
-		fusd_dev->clazz = sound_class;
-		fusd_dev->owns_class = 0;
-	}
-	else
-	{
-		fusd_dev->clazz = class_create(THIS_MODULE, fusd_dev->class_name);
-		if(IS_ERR(fusd_dev->clazz))
-		{
-			error = PTR_ERR(fusd_dev->clazz);
-			printk(KERN_ERR "class_create failed status: %d\n", error);
-			goto register_failed4;
-		}
-		fusd_dev->owns_class = 1;
-	}
-	
-	fusd_dev->class_device = CLASS_DEVICE_CREATE(fusd_dev->clazz, NULL, fusd_dev->dev_id, NULL, fusd_dev->dev_name);
-	if(fusd_dev->class_device == NULL)
-	{
-		error = PTR_ERR(fusd_dev->class_device);
-		printk(KERN_ERR "class_device_create failed status: %d\n", error);
-		goto register_failed5;
-	}
-	
-	/* make sure the registration was successful */
-  /*
+    if(classdir)
+      dput(classdir);
+    if(classdir2)
+      dput(classdir2);
+    
+    if(sb){
+      up_write(&sb->s_umount);
+      deactivate_super(sb);
+    }
+  }
+  
+  fusd_dev->class_device = CLASS_DEVICE_CREATE(fusd_dev->clazz, NULL, fusd_dev->dev_id, NULL, fusd_dev->dev_name);
+  if(fusd_dev->class_device == NULL)
+    {
+      error = PTR_ERR(fusd_dev->class_device);
+      printk(KERN_ERR "class_device_create failed status: %d\n", error);
+      goto register_failed5;
+    }
+  
+  /* make sure the registration was successful */
   if (fusd_dev->handle == 0) {
     error = -EIO;
     goto register_failed;
   }
-  */
-
+  
   /* remember the user's private data so we can pass it back later */
   fusd_dev->private_data = register_msg.device_info;
-
+  
   /* everything ok */
   fusd_dev->version = atomic_inc_and_ret(&last_version);
   RDEBUG(3, "pid %d registered /dev/%s v%ld", fusd_dev->pid, NAME(fusd_dev),
@@ -2133,16 +2206,15 @@ STATIC int fusd_release(struct inode *inode, struct file *file)
   }
 #endif
 
-  if(fusd_dev->handle)
-	{
-		class_device_destroy(fusd_dev->clazz, fusd_dev->dev_id);
-		if(fusd_dev->owns_class)
-		{
-			class_destroy(fusd_dev->clazz);
-		}
-		cdev_del(fusd_dev->handle);
-		unregister_chrdev_region(fusd_dev->dev_id, 1);
-	}
+  if(fusd_dev->handle){
+    class_device_destroy(fusd_dev->clazz, fusd_dev->dev_id);
+    if(fusd_dev->owns_class)
+      {
+	class_destroy(fusd_dev->clazz);
+      }
+    cdev_del(fusd_dev->handle);
+    unregister_chrdev_region(fusd_dev->dev_id, 1);
+  }
 
   /* mark the driver as being gone */
   zombify_dev(fusd_dev);
