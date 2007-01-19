@@ -1368,7 +1368,7 @@ STATIC ssize_t fusd_client_write(struct file *file,
 	 NAME(fusd_dev), fusd_dev->pid, current->pid);
 
   transaction = fusd_find_incomplete_transaction(fusd_file, FUSD_WRITE);
-  if (transaction && transaction->size == length)
+  if (transaction && transaction->size != length)
   {
     RDEBUG(2, "Incomplete I/O transaction %ld thrown out, as the transaction's size of %d bytes was not equal to "
               "the retry's size of %d bytes", transaction->transid, transaction->size, (int) length);
