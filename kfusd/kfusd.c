@@ -103,11 +103,6 @@
  * __wake_up. */
 /* #define CONFIG_FUSD_USE_WAKEUPSYNC */
 
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(2,4,9)
-# define vsnprintf(str, size, format, ap) vsprintf(str, format, ap)
-# define  snprintf(str, len, args...)      sprintf(str, args)
-#endif
-
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,13)
 
 #define CLASS class_simple
@@ -138,8 +133,8 @@
 #include "fusd_msg.h"
 #include "kfusd.h"
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,4,0)
-# error "***FUSD doesn't work before Linux Kernel v2.4.0"
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,0)
+# error "***FUSD doesn't work before Linux Kernel v2.6.0"
 #endif
 
 STATIC struct cdev* fusd_control_device;
@@ -181,12 +176,19 @@ STATIC int fusd_debug_level = CONFIG_FUSD_DEBUGLEVEL;
 module_param(fusd_debug_level, int, S_IRUGO);
 
 #define BUFSIZE 1000 /* kernel's kmalloc pool has a 1012-sized bucket */
+static int debug_throttle = 0; /* emit a maximum number of debug
+				  messages, else it's possible to take
+				  out the machine accidentally if a
+				  daemon disappears with open files */
 
 STATIC void rdebug_real(char *fmt, ...)
 {
   va_list ap;
   int len;
   char *message;
+
+  if(debug_throttle > 100) return;
+  debug_throttle++;
 
   /* I'm kmallocing since you don't really want 1k on the stack. I've
    * had stack overflow problems before; the kernel stack is quite
@@ -634,8 +636,8 @@ STATIC struct fusd_transaction* fusd_find_incomplete_transaction(fusd_file_t *fu
 
   if (transaction->subcmd != subcmd)
   {
-    RDEBUG(2, "Incomplete transaction %ld thrown out, was expecting subcmd %d but received %d", 
-           transaction->transid, transaction->subcmd, subcmd);
+      RDEBUG(2, "Incomplete transaction %ld thrown out, was expecting subcmd %d but received %d", 
+	     transaction->transid, transaction->subcmd, subcmd);
     fusd_cleanup_transaction(fusd_file, transaction);
     return NULL;
   }
@@ -1164,7 +1166,7 @@ STATIC int fusd_client_release(struct inode *inode, struct file *file)
   if (retval >= 0)
     retval = fusd_fops_call_wait(fusd_file, NULL, transaction);
 	
-	RDEBUG(5, "fusd_client_release: call_wait %d", retval);
+  RDEBUG(5, "fusd_client_release: call_wait %d", retval);
   /* delete the file off the device's file-list, and free it.  note
    * that device may be a zombie right now and may be freed when we
    * come back from free_fusd_file.  we only release the lock if the
@@ -1195,6 +1197,10 @@ STATIC ssize_t fusd_client_read(struct file *file , char *buf,
   int retval = -EPIPE;
 
   GET_FUSD_FILE_AND_DEV(file->private_data, fusd_file, fusd_dev);
+
+  if(ZOMBIE(fusd_dev))
+    goto zombie_dev;
+
   LOCK_FUSD_FILE(fusd_file);
 
   RDEBUG(3, "got a read on /dev/%s (owned by pid %d) from pid %d",
@@ -1203,7 +1209,7 @@ STATIC ssize_t fusd_client_read(struct file *file , char *buf,
   transaction = fusd_find_incomplete_transaction(fusd_file, FUSD_READ);
   if (transaction && transaction->size > count)
   {
-    RDEBUG(3, "Incomplete I/O transaction %ld thrown out, as the transaction's size of %d bytes was greater than "
+    RDEBUG(2, "Incomplete I/O transaction %ld thrown out, as the transaction's size of %d bytes was greater than "
               "the retry's size of %d bytes", transaction->transid, transaction->size, (int)count);
 
     fusd_cleanup_transaction(fusd_file, transaction);
@@ -1273,6 +1279,7 @@ STATIC ssize_t fusd_client_read(struct file *file , char *buf,
 
  invalid_file:
  invalid_dev:
+ zombie_dev:
   RDEBUG(3, "got a read on client file from pid %d, driver has disappeared",
 	 current->pid);
   return -EPIPE;
@@ -1362,6 +1369,10 @@ STATIC ssize_t fusd_client_write(struct file *file,
   struct fusd_transaction* transaction;
   
   GET_FUSD_FILE_AND_DEV(file->private_data, fusd_file, fusd_dev);
+
+  if(ZOMBIE(fusd_dev))
+    goto zombie_dev;
+
   LOCK_FUSD_FILE(fusd_file);
 
   RDEBUG(3, "got a write on /dev/%s (owned by pid %d) from pid %d",
@@ -1437,7 +1448,8 @@ STATIC ssize_t fusd_client_write(struct file *file,
 
  invalid_file:
  invalid_dev:
-  RDEBUG(3, "got a read on client file from pid %d, driver has disappeared",
+ zombie_dev:
+  RDEBUG(3, "got a write on client file from pid %d, driver has disappeared",
 	 current->pid);
   return -EPIPE;
 }
@@ -1453,6 +1465,10 @@ STATIC int fusd_client_ioctl(struct inode *inode, struct file *file,
   struct fusd_transaction* transaction;
   
   GET_FUSD_FILE_AND_DEV(file->private_data, fusd_file, fusd_dev);
+
+  if(ZOMBIE(fusd_dev))
+    goto zombie_dev;
+
   LOCK_FUSD_FILE(fusd_file);
 
   RDEBUG(3, "got an ioctl on /dev/%s (owned by pid %d) from pid %d",
@@ -1527,7 +1543,8 @@ STATIC int fusd_client_ioctl(struct inode *inode, struct file *file,
 
  invalid_file:
  invalid_dev:
-  RDEBUG(3, "got a read on client file from pid %d, driver has disappeared",
+ zombie_dev:
+  RDEBUG(3, "got an ioctl on client file from pid %d, driver has disappeared",
 	 current->pid);
   return -EPIPE;
 }
@@ -1576,6 +1593,10 @@ static int fusd_client_mmap(struct file *file, struct vm_area_struct * vma)
   struct fusd_mmap_instance* mmap_instance;
 
   GET_FUSD_FILE_AND_DEV(file->private_data, fusd_file, fusd_dev);
+
+  if(ZOMBIE(fusd_dev))
+    goto zombie_dev;
+
   LOCK_FUSD_FILE(fusd_file);
 
   RDEBUG(3, "got a mmap on /dev/%s (owned by pid %d) from pid %d",
@@ -1626,6 +1647,7 @@ static int fusd_client_mmap(struct file *file, struct vm_area_struct * vma)
 
  invalid_file:
  invalid_dev:
+ zombie_dev:
   RDEBUG(3, "got a mmap on client file from pid %d, driver has disappeared",
 	 current->pid);
   return -EPIPE;
@@ -2654,7 +2676,7 @@ STATIC void fusd_status_build_text(fusd_statcontext_t *fs)
   }
 
   len += snprintf(buf + len, buf_size - len,
-		  "\nFUSD $Revision: 1.97-kor-hacked-11 $ - %d devices used by %d clients\n",
+		  "\nFUSD $Revision$ - %d devices used by %d clients\n",
 		  total_files, total_clients);
 
  out:
@@ -2803,7 +2825,7 @@ STATIC int init_fusd(void)
 
 
   printk(KERN_INFO
-	 "fusd: starting, $Revision: 1.97-kor-hacked-11 $, $Date: 2003/07/11 22:29:39 $");
+	 "fusd: starting, $Revision$, $Date$");
 #ifdef CVSTAG
   printk(", release %s", CVSTAG);
 #endif

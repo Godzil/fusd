@@ -121,16 +121,15 @@ struct fusd_dev_t_s {
   struct task_struct* task;
   
   char *name;			/* Name of the device under devfs (/dev) */
-	char *class_name;
-	char *dev_name;
-	struct CLASS *clazz;
-	int owns_class;
-	struct class_device *class_device;
-	
+  char *class_name;
+  char *dev_name;
+  struct CLASS *clazz;
+  int owns_class;
+  struct class_device *class_device;
+  
   void *private_data;		/* User's private data */
-	struct cdev* handle;
-	dev_t dev_id;
-//  devfs_handle_t handle;	/* The devfs-provided handle */
+  struct cdev* handle;
+  dev_t dev_id;
 
   fusd_file_t **files;		/* Array of this device's open files */
   int array_size;		/* Size of the array pointed to by 'files' */
