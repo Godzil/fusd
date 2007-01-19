@@ -247,7 +247,7 @@ void pager_notify_complete_read(struct pager_client *c)
  * one; if this happens, use fusd_destroy() to get rid of the older one.
  */
 /* EXAMPLE START pager-polldiff.c */
-ssize_t pager_notify_polldiff(struct fusd_file_info *file,
+int pager_notify_polldiff(struct fusd_file_info *file,
 			      unsigned int cached_state)
 {
   struct pager_client *c = (struct pager_client *) file->private_data;

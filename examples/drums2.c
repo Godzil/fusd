@@ -82,14 +82,16 @@ int drums_open(struct fusd_file_info *file)
   /* file->device_info is what we passed to fusd_register when we
    * registered the device.  It's a pointer into the "drums" struct. */
   struct drum_info *d = (struct drum_info *) file->device_info;
+  int *user_num = calloc(1, sizeof(*user_num));
 
   /* Store this user's unique user number in their private_data */
-  file->private_data = (void *) ++(d->num_users);
+  *user_num = ++(d->num_users);
+  file->private_data = (void *) user_num; 
 
   return 0; /* return success */
 }
 
-int drums_read(struct fusd_file_info *file, char *user_buffer,
+ssize_t drums_read(struct fusd_file_info *file, char *user_buffer,
 	       size_t user_length, loff_t *offset)
 {
   struct drum_info *d = (struct drum_info *) file->device_info;
@@ -97,10 +99,11 @@ int drums_read(struct fusd_file_info *file, char *user_buffer,
   char sound[128];
 
   sprintf(sound, "You are user %d to hear a drum go '%s'!\n",
-	  (int) file->private_data, d->name);
+	  *(int *) file->private_data, d->name);
 
   len = MIN(user_length, strlen(sound));
   memcpy(user_buffer, sound, len);
+  *offset += len;
   return len;
 }
 /* EXAMPLE STOP */

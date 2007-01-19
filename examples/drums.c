@@ -59,7 +59,7 @@
 static char *drums_strings[] = {"bam", "bum", "beat", "boom",
 				"bang", "crash", NULL};
 
-int drums_read(struct fusd_file_info *file, char *user_buffer,
+ssize_t drums_read(struct fusd_file_info *file, char *user_buffer,
 	       size_t user_length, loff_t *offset)
 {
   int len;
