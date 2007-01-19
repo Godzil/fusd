@@ -91,7 +91,7 @@
 /* Default debug level for FUSD messages.  Has no effect unless
  * CONFIG_FUSD_DEBUG is defined. */
 #ifndef CONFIG_FUSD_DEBUGLEVEL
-#define CONFIG_FUSD_DEBUGLEVEL 2
+#define CONFIG_FUSD_DEBUGLEVEL 3
 #endif
 
 /* Define this to check for memory leaks */
@@ -2066,7 +2066,7 @@ STATIC int fusd_register_device(fusd_dev_t *fusd_dev,
     
     if(sys_class){
       RDEBUG(3, "Found entry for class '%s' in sysfs\n",register_msg.clazz);
-      fusd_dev->clazz = sound_class;
+      fusd_dev->clazz = sys_class;
       fusd_dev->owns_class = 0;
     }else{
       RDEBUG(3, "Sysfs has no entry for '%s'; registering new class\n",register_msg.clazz);
