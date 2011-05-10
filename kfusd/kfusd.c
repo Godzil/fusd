@@ -39,7 +39,7 @@
  * Copyright (c) 2002-2003, Regents of the University of California
  * Copyright (c) 2007 Monty and Xiph.Org
  *
- * $Id$
+ * $Id: kfusd.c 12354 2007-01-19 17:26:14Z xiphmont $
  */
 
 /*
@@ -2977,7 +2977,7 @@ STATIC void fusd_status_build_text (fusd_statcontext_t *fs)
    }
 
    len += snprintf(buf + len, buf_size - len,
-                   "\nFUSD $Id$ - %d devices used by %d clients\n",
+                   "\nFUSD $Id:$ - %d devices used by %d clients\n",
                    total_files, total_clients);
 
 out:
@@ -3127,7 +3127,7 @@ STATIC int init_fusd (void)
 
 
    printk(KERN_INFO
-          "fusd: starting, $Id$");
+          "fusd: starting, $Id:$");
 #ifdef CVSTAG
    printk(", release %s", CVSTAG);
 #endif
