@@ -6,10 +6,10 @@ PREFIX = /usr/local
 LIBDIR = $(PREFIX)/lib
 INCDIR = $(PREFIX)/include
 
-CC      = gcc 
-LD      = gcc
+CC      = $(CROSS_COMPILE)gcc 
+LD      = $(CROSS_COMPILE)gcc
 INSTALL = install
-STRIP   = strip
+STRIP   = $(CROSS_COMPILE)strip
 PREFIX  = /usr/local
 BINDIR  = $(PREFIX)/bin
 ETCDIR  = /etc/$(TARGET)

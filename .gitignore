@@ -1,0 +1,23 @@
+# Ignore all generated files
+*.o
+*.ko
+*.cmd
+*.a
+*.d
+*.mod
+*.mod.c
+*.order
+*.so*
+*~
+
+# Generated demo executables
+examples/console-read
+examples/drums
+examples/drums2
+examples/drums3
+examples/echo
+examples/helloworld
+examples/ioctl
+examples/logring
+examples/pager
+examples/uid-filter

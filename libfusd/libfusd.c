@@ -328,8 +328,6 @@ void fusd_fdset_add(fd_set *set, int *max)
   }
 }
 
-
-
 /*
  * fusd_dispatch_fdset: given an fd_set full of descriptors, call
  * fusd_dispatch on every descriptor in the set which is a valid FUSD
@@ -410,16 +408,21 @@ static int fusd_dispatch_one(int fd, fusd_file_operations_t *fops)
   
   /* dispatch on operation type */
   user_retval = -ENOSYS;
+  printf("dispatch_one: subcmd: %d - ", msg->subcmd);
+  
   switch (msg->subcmd) {
   case FUSD_OPEN:
+    printf("FUSD_OPEN\n");
     if (fops && fops->open)
       user_retval = fops->open(file);
     break;
   case FUSD_CLOSE:
+    printf("FUSD_CLOSE\n");
     if (fops && fops->close)
       user_retval = fops->close(file);
     break;
   case FUSD_READ:
+    printf("FUSD_READ\n");
     /* allocate a buffer and make the call */
     if (fops && fops->read) {
       if ((msg->data = malloc(msg->parm.fops_msg.length)) == NULL) {
@@ -433,11 +436,13 @@ static int fusd_dispatch_one(int fd, fusd_file_operations_t *fops)
     }
     break;
   case FUSD_WRITE:
+    printf("FUSD_WRITE\n");
     if (fops && fops->write)
       user_retval = fops->write(file, msg->data, msg->datalen,
 				&msg->parm.fops_msg.offset);
     break;
   case FUSD_MMAP:
+    printf("FUSD_MMAP\n");
     if (fops && fops->mmap)
     {
       user_retval = fops->mmap(file, msg->parm.fops_msg.offset, msg->parm.fops_msg.length, msg->parm.fops_msg.flags,
@@ -445,6 +450,7 @@ static int fusd_dispatch_one(int fd, fusd_file_operations_t *fops)
     }
     break;
   case FUSD_IOCTL:
+    printf("FUSD_IOCTL\n");
     if (fops && fops->ioctl) {
       /* in the case of an ioctl read, allocate a buffer for the
        * driver to write to, IF there isn't already a buffer.  (there
@@ -466,6 +472,7 @@ static int fusd_dispatch_one(int fd, fusd_file_operations_t *fops)
     break;
     
   case FUSD_POLL_DIFF:
+     printf("FUSD_POLL_DIFF\n");
     /* This callback requests notification when an event occurs on a file,
      * e.g. becoming readable or writable */
     if (fops && fops->poll_diff)
@@ -473,6 +480,7 @@ static int fusd_dispatch_one(int fd, fusd_file_operations_t *fops)
     break;    
   
   case FUSD_UNBLOCK:
+    printf("FUSD_UNBLOCK\n");
     /* This callback is called when a system call is interrupted */
     if (fops && fops->unblock)
       user_retval = fops->unblock(file);    
@@ -533,6 +541,7 @@ void fusd_dispatch(int fd)
   if (!FUSD_FD_VALID(fd)) {
     errno = EBADF;
     retval = -1;
+    fprintf(stderr, "libfusd: not a valid FUSD FD\n");
     goto out;
   }
   fops = FUSD_GET_FOPS(fd);
@@ -555,7 +564,7 @@ void fusd_dispatch(int fd)
 
  out:
   if (retval < 0 && errno != EPIPE)
-    fprintf(stderr, "libfusd: fusd_dispatch error on fd %d: %m\n", fd);
+    fprintf(stderr, "libfusd: fusd_dispatch error on fd %d: [%d] %m \n", fd, retval);
 }
 
 
@@ -648,11 +657,16 @@ int fusd_return(fusd_file_info_t *file, ssize_t retval)
 
   /* send message to kernel */
   if (msg->datalen && msg->data != NULL) {
+     printf("(msg->datalen [%d] && msg->data != NULL [%p]", msg->datalen, msg->data);
     iov[0].iov_base = msg;
     iov[0].iov_len = sizeof(fusd_msg_t);
     iov[1].iov_base = msg->data;
     iov[1].iov_len = msg->datalen;
+#if 0
     driver_retval = writev(fd, iov, 2);
+#else
+    driver_retval = ioctl(fd, 0xb16b00b5, iov);
+#endif
   }
   else {
     driver_retval = write(fd, msg, sizeof(fusd_msg_t));

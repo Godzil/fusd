@@ -88,7 +88,7 @@ struct fusd_transaction
 struct fusd_dev_t_s;
 typedef struct fusd_dev_t_s fusd_dev_t;
 struct CLASS;
-struct class_device;
+struct device;
 
 /* state kept per opened file (i.e., an instance of a device) */
 typedef struct {
@@ -125,7 +125,7 @@ struct fusd_dev_t_s {
   char *dev_name;
   struct CLASS *clazz;
   int owns_class;
-  struct class_device *class_device;
+  struct device *device;
   
   void *private_data;		/* User's private data */
   struct cdev* handle;
