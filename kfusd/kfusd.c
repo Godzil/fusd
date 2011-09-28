@@ -38,6 +38,7 @@
  * Copyright (c) 2001, Sensoria Corporation
  * Copyright (c) 2002-2003, Regents of the University of California
  * Copyright (c) 2007 Monty and Xiph.Org
+ * Copyright (c) 2009-2011 Manoel Trapier <godzil@godzil.net>
  *
  * $Id: kfusd.c 12354 2007-01-19 17:26:14Z xiphmont $
  */
@@ -86,7 +87,7 @@
 #define STATIC
 
 /* Define this if you want to emit debug messages (adds ~8K) */
-#define CONFIG_FUSD_DEBUG
+//#define CONFIG_FUSD_DEBUG
 
 /* Default debug level for FUSD messages.  Has no effect unless
  * CONFIG_FUSD_DEBUG is defined. */
@@ -261,6 +262,7 @@ DECLARE_MUTEX (fusd_devlist_sem);
 
 //#ifdef MODULE_LICENSE
 MODULE_AUTHOR ("Jeremy Elson <jelson@acm.org> (c)2001");
+MODULE_AUTHOR ("Manoel Trapier <godzil@godzil.net> (c)2009-2011");
 MODULE_LICENSE ("GPL");
 //#endif
 
@@ -1688,11 +1690,17 @@ invalid_file:
 }
 static void fusd_client_mm_open (struct vm_area_struct * vma);
 static void fusd_client_mm_close (struct vm_area_struct * vma);
+
+/* int (*fault)(struct vm_area_struct *vma, struct vm_fault *vmf); */
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,30)
+static int fusd_client_fault (struct vm_area_struct *vma, struct vm_fault *vmf);
+#else
 static int fusd_client_fault (struct vm_area_struct *vma, struct vm_fault *vmf, int *type);
+#endif
 static struct vm_operations_struct fusd_remap_vm_ops ={
-                                                       open : fusd_client_mm_open,
-                                                       close : fusd_client_mm_close,
-                                                       fault : fusd_client_fault,
+                                                       .open = fusd_client_mm_open,
+                                                       .close = fusd_client_mm_close,
+                                                       .fault = fusd_client_fault,
 };
 
 struct fusd_mmap_instance
@@ -1790,7 +1798,11 @@ invalid_file:
    return -EPIPE;
 }
 
+#if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,30)
+static int fusd_client_fault (struct vm_area_struct *vma, struct vm_fault *vmf)
+#else
 static int fusd_client_fault (struct vm_area_struct *vma, struct vm_fault *vmf, int *type)
+#endif
 {
    struct fusd_mmap_instance* mmap_instance = (struct fusd_mmap_instance*) vma->vm_private_data;
    unsigned long offset;
@@ -1817,8 +1829,10 @@ static int fusd_client_fault (struct vm_area_struct *vma, struct vm_fault *vmf, 
    {
       get_page(page);
       vmf->page = page;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,30)
       if ( type )
          *type = VM_FAULT_MINOR;
+#endif
    }
 out:
    return 0;
@@ -1926,14 +1940,14 @@ invalid_dev:
 
 
 STATIC struct file_operations fusd_client_fops = {
-                                                  owner : THIS_MODULE,
-                                                  open : fusd_client_open,
-                                                  release : fusd_client_release,
-                                                  read : fusd_client_read,
-                                                  write : fusd_client_write,
-                                                  ioctl : fusd_client_ioctl,
-                                                  poll : fusd_client_poll,
-                                                  mmap : fusd_client_mmap
+                                                  .owner = THIS_MODULE,
+                                                  .open =  fusd_client_open,
+                                                  .release = fusd_client_release,
+                                                  .read = fusd_client_read,
+                                                  .write = fusd_client_write,
+                                                  .unlocked_ioctl = fusd_client_ioctl,
+                                                  .poll = fusd_client_poll,
+                                                  .mmap = fusd_client_mmap
 };
 
 
@@ -2623,8 +2637,14 @@ STATIC int fusd_ioctl (struct inode *inode, struct file *file,
       RDEBUG(9, "%s: !!!!!!! ( o  )(  o ) !!!!!!!", __func__);
 
       /* Act like writev... */
-      copy_from_user(&iov, argp, sizeof (struct iovec) * 2);
-      return fusd_writev(file, &iov, 2, NULL);
+      if (!copy_from_user(&iov, argp, sizeof (struct iovec) * 2))
+      {
+         return fusd_writev(file, &iov, 2, NULL);
+      }
+      else
+      {
+         return -EIO;
+      }
    }
    RDEBUG(2, "%s: got illegal ioctl #%08X# Or ARG is null [%p]", __func__, cmd, argp);
    return -EINVAL;
@@ -2821,14 +2841,14 @@ invalid_dev:
 
 
 STATIC struct file_operations fusd_fops = {
-                                           owner : THIS_MODULE,
-                                           open : fusd_open,
-                                           read : fusd_read,
-                                           write : fusd_write,
+                                           .owner = THIS_MODULE,
+                                           .open = fusd_open,
+                                           .read = fusd_read,
+                                           .write = fusd_write,
                                            //writev:   fusd_writev,
-                                           ioctl : fusd_ioctl,
-                                           release : fusd_release,
-                                           poll : fusd_poll,
+                                           .unlocked_ioctl = fusd_ioctl,
+                                           .release = fusd_release,
+                                           .poll = fusd_poll,
 };
 
 /*************************************************************************/
@@ -3105,12 +3125,12 @@ STATIC unsigned int fusd_status_poll (struct file *file, poll_table *wait)
 
 
 STATIC struct file_operations fusd_status_fops = {
-                                                  owner : THIS_MODULE,
-                                                  open : fusd_status_open,
-                                                  ioctl : fusd_status_ioctl,
-                                                  read : fusd_status_read,
-                                                  release : fusd_status_release,
-                                                  poll : fusd_status_poll,
+                                                  .owner = THIS_MODULE,
+                                                  .open = fusd_status_open,
+                                                  .unlocked_ioctl = fusd_status_ioctl,
+                                                  .read = fusd_status_read,
+                                                  .release = fusd_status_release,
+                                                  .poll = fusd_status_poll,
 };
 
 /*************************************************************************/
