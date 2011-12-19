@@ -60,7 +60,7 @@
  * If you close the FD and then reopen it, there will be a race (pages
  * that arrive between the close and open will not be delivered).
  *
- * $Id$
+ * $Id: pager.c 12355 2007-01-19 17:44:17Z xiphmont $
  */
 
 #include <stdio.h>

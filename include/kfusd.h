@@ -37,28 +37,28 @@
  *
  * Private header file used by the Linux Kernel Module
  *
- * $Id$
+ * $Id: kfusd.h 12351 2007-01-19 07:22:54Z xiphmont $
  */
 
 #ifndef __KFUSD_H__
-#define __KFUSD_H__
+# define __KFUSD_H__
 
-#include "fusd_msg.h"
+# include "fusd_msg.h"
 
 /* magic numbers for structure checking; unique w.r.t
  * /usr/src/linux/Documentation/magic-number.txt */
-#define FUSD_DEV_MAGIC      0x8b43a123
-#define FUSD_FILE_MAGIC     0x613aa8fe
+# define FUSD_DEV_MAGIC      0x8b43a123
+# define FUSD_FILE_MAGIC     0x613aa8fe
 
 /* number of devices that can be created with fusd */
-#define MAX_FUSD_DEVICES    128
+# define MAX_FUSD_DEVICES    128
 
 /* number of times each device can be opened simultaneously */
-#define MIN_FILEARRAY_SIZE  8  /* initialize allocation */
-#define MAX_FILEARRAY_SIZE  1024 /* maximum it can grow to */
+# define MIN_FILEARRAY_SIZE  8  /* initialize allocation */
+# define MAX_FILEARRAY_SIZE  1024 /* maximum it can grow to */
 
 /* maximum read/write size we're willing to service */
-#define MAX_RW_SIZE         (1024*128)
+# define MAX_RW_SIZE         (1024*128)
 
 
 /********************** Structure Definitions *******************************/
@@ -174,34 +174,34 @@ STATIC struct fusd_transaction* fusd_find_transaction_by_pid(fusd_file_t *fusd_f
 
 /**** Utility functions & macros ****/
 
-#ifdef CONFIG_FUSD_USE_WAKEUPSYNC
-#define WAKE_UP_INTERRUPTIBLE_SYNC(x) wake_up_interruptible_sync(x)
-#else
-#define WAKE_UP_INTERRUPTIBLE_SYNC(x) wake_up_interruptible(x)
-#endif /* CONFIG_FUSD_USE_WAKEUPSYNC */
+# ifdef CONFIG_FUSD_USE_WAKEUPSYNC
+#  define WAKE_UP_INTERRUPTIBLE_SYNC(x) wake_up_interruptible_sync(x)
+# else
+#  define WAKE_UP_INTERRUPTIBLE_SYNC(x) wake_up_interruptible(x)
+# endif /* CONFIG_FUSD_USE_WAKEUPSYNC */
 
-#ifdef CONFIG_FUSD_DEBUG
+# ifdef CONFIG_FUSD_DEBUG
 static void rdebug_real(char *fmt, ...)
   __attribute__ ((format (printf, 1, 2)));
 
-#define RDEBUG(message_level, args...) do { \
+#  define RDEBUG(message_level, args...) do { \
    if (fusd_debug_level >= message_level) rdebug_real(args); \
 } while(0)
-#else
-#define RDEBUG(message_level, args...)
-#endif /* CONFIG_FUSD_DEBUG */
+# else
+#  define RDEBUG(message_level, args...)
+# endif /* CONFIG_FUSD_DEBUG */
 
 
-#define ZOMBIE(fusd_dev)  ((fusd_dev)->zombie)
+# define ZOMBIE(fusd_dev)  ((fusd_dev)->zombie)
 
 
-#define GET_FUSD_DEV(candidate, fusd_dev) do { \
+# define GET_FUSD_DEV(candidate, fusd_dev) do { \
   fusd_dev = candidate; \
   if (fusd_dev == NULL || fusd_dev->magic != FUSD_DEV_MAGIC) \
         goto invalid_dev; \
 } while (0)
 
-#define GET_FUSD_FILE_AND_DEV(candidate, fusd_file, fusd_dev) do { \
+# define GET_FUSD_FILE_AND_DEV(candidate, fusd_file, fusd_dev) do { \
   fusd_file = candidate; \
   if (fusd_file == NULL || fusd_file->magic != FUSD_FILE_MAGIC) \
      goto invalid_file; \
@@ -210,36 +210,40 @@ static void rdebug_real(char *fmt, ...)
     goto invalid_file; \
 } while (0)
 
-
-#define LOCK_FUSD_DEV(fusd_dev) \
+#  define LOCK_FUSD_DEV(fusd_dev) \
   do { down(&fusd_dev->dev_sem); \
   if (ZOMBIE(fusd_dev)) { up(&fusd_dev->dev_sem); goto zombie_dev; } \
  } while (0)
 
 /* rawlock does not do a zombie check */
-#define RAWLOCK_FUSD_DEV(fusd_dev) \
+
+#  define RAWLOCK_FUSD_DEV(fusd_dev) \
   do { down(&fusd_dev->dev_sem); } while (0)
 
-#define UNLOCK_FUSD_DEV(fusd_dev) \
+#  define UNLOCK_FUSD_DEV(fusd_dev) \
   do { up(&fusd_dev->dev_sem); } while (0)
 
-
-#define LOCK_FUSD_FILE(fusd_file) \
+#  define LOCK_FUSD_FILE(fusd_file) \
   do { down(&fusd_file->file_sem); \
  } while (0)
 
-#define UNLOCK_FUSD_FILE(fusd_file) \
+#  define UNLOCK_FUSD_FILE(fusd_file) \
   do { up(&fusd_file->file_sem); } while (0)
 
-#define FREE_FUSD_MSGC(fusd_msgc) do { \
+# define FREE_FUSD_MSGC(fusd_msgc) do { \
    if ((fusd_msgc)->fusd_msg.data != NULL) VFREE(fusd_msgc->fusd_msg.data); \
    KFREE(fusd_msgc); \
 } while (0)
 
-#define NAME(fusd_dev) ((fusd_dev)->name == NULL ? \
+# define FREE_FUSD_MSGC(fusd_msgc) do { \
+   if ((fusd_msgc)->fusd_msg.data != NULL) VFREE(fusd_msgc->fusd_msg.data); \
+   KFREE(fusd_msgc); \
+} while (0)
+
+# define NAME(fusd_dev) ((fusd_dev)->name == NULL ? \
 			"<noname>" : (fusd_dev)->name)
 
-#ifdef CONFIG_FUSD_MEMDEBUG
+# ifdef CONFIG_FUSD_MEMDEBUG
 static int  fusd_mem_init(void);
 static void fusd_mem_cleanup(void);
 static void fusd_mem_add(void *ptr, int line, int size);
@@ -248,22 +252,22 @@ static void *fusd_kmalloc(size_t size, int type, int line);
 static void fusd_kfree(void *ptr);
 static void *fusd_vmalloc(size_t size, int line);
 static void fusd_vfree(void *ptr);
-# define KMALLOC(size, type) fusd_kmalloc(size, type, __LINE__)
-# define KFREE(ptr) fusd_kfree(ptr)
-# define VMALLOC(size) fusd_vmalloc(size, __LINE__)
-# define VFREE(ptr) fusd_vfree(ptr)
-#else /* no memory debugging */
-# define KMALLOC(size, type) kmalloc(size, type)
-# define KFREE(ptr) kfree(ptr)
+#  define KMALLOC(size, type) fusd_kmalloc(size, type, __LINE__)
+#  define KFREE(ptr) fusd_kfree(ptr)
+#  define VMALLOC(size) fusd_vmalloc(size, __LINE__)
+#  define VFREE(ptr) fusd_vfree(ptr)
+# else /* no memory debugging */
+#  define KMALLOC(size, type) kmalloc(size, type)
+#  define KFREE(ptr) kfree(ptr)
 /*# define VMALLOC(size) vmalloc(size)*/
-# define VMALLOC(size) kmalloc(size, GFP_KERNEL)
-# define VFREE(ptr) kfree(ptr)
-#endif /* CONFIG_FUSD_MEMDEBUG */
+#  define VMALLOC(size) kmalloc(size, GFP_KERNEL)
+#  define VFREE(ptr) kfree(ptr)
+# endif /* CONFIG_FUSD_MEMDEBUG */
 
 
 
 /* Functions like this should be in the kernel, but they are not.  Sigh. */
-#ifdef CONFIG_SMP
+# ifdef CONFIG_SMP
 
 DECLARE_MUTEX(atomic_ops);
 
@@ -276,12 +280,11 @@ static __inline__ int atomic_inc_and_ret(int *i)
   up(&atomic_ops);
   return val;
 }
-#else
+# else
 static __inline__ int atomic_inc_and_ret(int *i)
 {
   return (++(*i));
 }
-#endif
-
+# endif
 
 #endif /* __KFUSD_H__ */

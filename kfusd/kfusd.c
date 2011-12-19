@@ -1945,7 +1945,7 @@ STATIC struct file_operations fusd_client_fops = {
                                                   .release = fusd_client_release,
                                                   .read = fusd_client_read,
                                                   .write = fusd_client_write,
-                                                  .unlocked_ioctl = fusd_client_ioctl,
+                                                  .ioctl = fusd_client_ioctl,
                                                   .poll = fusd_client_poll,
                                                   .mmap = fusd_client_mmap
 };
@@ -2846,7 +2846,7 @@ STATIC struct file_operations fusd_fops = {
                                            .read = fusd_read,
                                            .write = fusd_write,
                                            //writev:   fusd_writev,
-                                           .unlocked_ioctl = fusd_ioctl,
+                                           .ioctl = fusd_ioctl,
                                            .release = fusd_release,
                                            .poll = fusd_poll,
 };
@@ -3127,7 +3127,7 @@ STATIC unsigned int fusd_status_poll (struct file *file, poll_table *wait)
 STATIC struct file_operations fusd_status_fops = {
                                                   .owner = THIS_MODULE,
                                                   .open = fusd_status_open,
-                                                  .unlocked_ioctl = fusd_status_ioctl,
+                                                  .ioctl = fusd_status_ioctl,
                                                   .read = fusd_status_read,
                                                   .release = fusd_status_release,
                                                   .poll = fusd_status_poll,

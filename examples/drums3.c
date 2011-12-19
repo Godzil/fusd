@@ -43,7 +43,7 @@
  * However, it also prints a prompt to the console, asking the user if
  * how loud the drums should be.
  *
- * $Id$
+ * $Id: drums3.c 12351 2007-01-19 07:22:54Z xiphmont $
  */
 
 #include <stdio.h>

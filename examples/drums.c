@@ -42,7 +42,7 @@
  * directory: /dev/drums/bam, /dev/drums/bum, etc.  If you cat one of
  * these devices, it returns a string that's the same as its name.
  *
- * $Id$
+ * $Id: drums.c 12355 2007-01-19 17:44:17Z xiphmont $
  */
 
 #include <stdio.h>

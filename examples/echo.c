@@ -41,7 +41,7 @@
  * stored.  Then, when you read (e.g. "cat /dev/echo"), you get back
  * whatever you wrote most recently.
  *
- * $Id$ 
+ * $Id: echo.c 12351 2007-01-19 07:22:54Z xiphmont $ 
  */
 
 #include <stdio.h>

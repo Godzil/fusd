@@ -47,7 +47,7 @@
  * to remember if this user has read before; cat /dev/drums/X will
  * read infinitely
  *
- * $Id$
+ * $Id: drums2.c 12355 2007-01-19 17:44:17Z xiphmont $
  */
 
 #include <stdio.h>

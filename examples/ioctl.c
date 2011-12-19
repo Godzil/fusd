@@ -41,7 +41,7 @@
  * the other examples, anyway), because this program is both an
  * example and part of the regression test suite.
  *
- * $Id$ 
+ * $Id: ioctl.c 12351 2007-01-19 07:22:54Z xiphmont $ 
  */
 
 #include <stdio.h>
