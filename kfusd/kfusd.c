@@ -114,37 +114,22 @@
 #   define CLASS_DEVICE_DESTROY(a, b) class_simple_device_remove(b)
 
 #else
-
 #   define CLASS class
-
 #   if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,15)
-
-#      define CLASS_DEVICE_CREATE(a, b, c, d, e) device_create(a, c, d, e)
-
+#      define CLASS_DEVICE_CREATE(a, b, c, d, e) class_device_create(a, c, d, e)
 #   else
-
 #      if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,30)
-
 #         define CLASS_DEVICE_CREATE(a, b, c, d, e) device_create(a, b, c, d, e)
-
 #      else
-
 #         define CLASS_DEVICE_CREATE(a, b, c, d, e) device_create(a, b, c, d, e)
-
 #      endif
-
 #   endif
-
 #endif
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,30)
-
 #   define CLASS_DEVICE_DESTROY(a, b) device_destroy(a, b)
-
 #else
-
 #   define CLASS_DEVICE_DESTROY(a, b) device_destroy(a, b)
-
 #endif
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,19)
@@ -242,8 +227,14 @@ STATIC dev_t status_id;
 
 static struct CLASS *fusd_class;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,29)
+static struct class_device *fusd_control_device;
+static struct class_device *fusd_status_device;
+#else
 static struct device *fusd_control_device;
 static struct device *fusd_status_device;
+#endif
+
 
 extern struct CLASS *sound_class;
 
@@ -258,7 +249,11 @@ STATIC DECLARE_WAIT_QUEUE_HEAD (new_device_wait);
 
 /* the list of valid devices, and sem to protect it */
 LIST_HEAD (fusd_devlist_head);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,30)
 DECLARE_MUTEX (fusd_devlist_sem);
+#else
+DEFINE_SEMAPHORE (fusd_devlist_sem);
+#endif
 
 //#ifdef MODULE_LICENSE
 MODULE_AUTHOR ("Jeremy Elson <jelson@acm.org> (c)2001");
@@ -840,8 +835,10 @@ STATIC int fusd_fops_call_send (fusd_file_t *fusd_file_arg,
 
    /* fill the rest of the structure */
    fusd_msg->parm.fops_msg.pid = current->pid;
-   //  fusd_msg->parm.fops_msg.uid = current_uid();
-   //  fusd_msg->parm.fops_msg.gid = current_gid();
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,29)
+   fusd_msg->parm.fops_msg.uid = current_uid();
+   fusd_msg->parm.fops_msg.gid = current_gid();
+#endif
    fusd_msg->parm.fops_msg.flags = fusd_file->file->f_flags;
    fusd_msg->parm.fops_msg.offset = fusd_file->file->f_pos;
    fusd_msg->parm.fops_msg.device_info = fusd_dev->private_data;
@@ -1140,8 +1137,13 @@ int fusd_dev_add_file (struct file *file, fusd_dev_t *fusd_dev, fusd_file_t **fu
    init_waitqueue_head(&fusd_file->file_wait);
    init_waitqueue_head(&fusd_file->poll_wait);
    INIT_LIST_HEAD(&fusd_file->transactions);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,30)   
    init_MUTEX(&fusd_file->file_sem);
    init_MUTEX(&fusd_file->transactions_sem);
+#else
+   sema_init(&fusd_file->file_sem, 1);
+   sema_init(&fusd_file->transactions_sem, 1);
+#endif
    fusd_file->last_poll_sent = -1;
    fusd_file->magic = FUSD_FILE_MAGIC;
    fusd_file->fusd_dev = fusd_dev;
@@ -1589,8 +1591,13 @@ invalid_file:
    return -EPIPE;
 }
 
+#ifndef HAVE_UNLOCKED_IOCTL
 STATIC int fusd_client_ioctl (struct inode *inode, struct file *file,
                               unsigned int cmd, unsigned long arg)
+#else
+STATIC long fusd_client_unlocked_ioctl (struct file *file,
+                              unsigned int cmd, unsigned long arg)
+#endif
 {
    fusd_dev_t *fusd_dev;
    fusd_file_t *fusd_file;
@@ -1937,8 +1944,7 @@ invalid_dev:
    return POLLPRI;
 }
 
-
-
+#ifndef HAVE_UNLOCKED_IOCTL
 STATIC struct file_operations fusd_client_fops = {
                                                   .owner = THIS_MODULE,
                                                   .open =  fusd_client_open,
@@ -1949,7 +1955,18 @@ STATIC struct file_operations fusd_client_fops = {
                                                   .poll = fusd_client_poll,
                                                   .mmap = fusd_client_mmap
 };
-
+#else
+STATIC struct file_operations fusd_client_fops = {
+                                                  .owner = THIS_MODULE,
+                                                  .open =  fusd_client_open,
+                                                  .release = fusd_client_release,
+                                                  .read = fusd_client_read,
+                                                  .write = fusd_client_write,
+                                                  .unlocked_ioctl = fusd_client_unlocked_ioctl,
+                                                  .poll = fusd_client_poll,
+                                                  .mmap = fusd_client_mmap
+};
+#endif
 
 /*************************************************************************/
 /*************************************************************************/
@@ -2351,7 +2368,11 @@ STATIC int fusd_open (struct inode *inode, struct file *file)
       goto file_malloc_failed;
 
    init_waitqueue_head(&fusd_dev->dev_wait);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,30)
    init_MUTEX(&fusd_dev->dev_sem);
+#else
+   sema_init(&fusd_dev->dev_sem, 1);
+#endif
    fusd_dev->magic = FUSD_DEV_MAGIC;
    fusd_dev->pid = current->pid;
    fusd_dev->task = current;
@@ -2626,8 +2647,13 @@ STATIC ssize_t fusd_writev (struct file *file,
                              iov[1].iov_base, iov[1].iov_len);
 }
 
+#ifndef HAVE_UNLOCKED_IOCTL
 STATIC int fusd_ioctl (struct inode *inode, struct file *file,
                        unsigned int cmd, unsigned long arg)
+#else
+STATIC long fusd_unlocked_ioctl (struct file *file,
+                       unsigned int cmd, unsigned long arg)
+#endif
 {
    void __user *argp = (void __user *) arg;
    struct iovec iov;
@@ -2839,7 +2865,7 @@ invalid_dev:
    return 0;
 }
 
-
+#ifndef HAVE_UNLOCKED_IOCTL
 STATIC struct file_operations fusd_fops = {
                                            .owner = THIS_MODULE,
                                            .open = fusd_open,
@@ -2850,6 +2876,19 @@ STATIC struct file_operations fusd_fops = {
                                            .release = fusd_release,
                                            .poll = fusd_poll,
 };
+#else
+STATIC struct file_operations fusd_fops = {
+                                           .owner = THIS_MODULE,
+                                           .open = fusd_open,
+                                           .read = fusd_read,
+                                           .write = fusd_write,
+                                           //writev:   fusd_writev,
+                                           .unlocked_ioctl = fusd_unlocked_ioctl,
+                                           .release = fusd_release,
+                                           .poll = fusd_poll,
+};
+#endif
+
 
 /*************************************************************************/
 
@@ -2904,8 +2943,13 @@ STATIC int fusd_status_release (struct inode *inode, struct file *file)
 }
 
 /* ioctl() on /dev/fusd/status */
+#ifndef HAVE_UNLOCKED_IOCTL
 STATIC int fusd_status_ioctl (struct inode *inode, struct file *file,
                               unsigned int cmd, unsigned long arg)
+#else
+STATIC long fusd_status_unlocked_ioctl (struct file *file,
+                              unsigned int cmd, unsigned long arg)
+#endif                              
 {
    fusd_statcontext_t *fs = (fusd_statcontext_t *) file->private_data;
 
@@ -3123,7 +3167,7 @@ STATIC unsigned int fusd_status_poll (struct file *file, poll_table *wait)
       return 0;
 }
 
-
+#ifndef HAVE_UNLOCKED_IOCTL
 STATIC struct file_operations fusd_status_fops = {
                                                   .owner = THIS_MODULE,
                                                   .open = fusd_status_open,
@@ -3132,6 +3176,16 @@ STATIC struct file_operations fusd_status_fops = {
                                                   .release = fusd_status_release,
                                                   .poll = fusd_status_poll,
 };
+#else
+STATIC struct file_operations fusd_status_fops = {
+                                                  .owner = THIS_MODULE,
+                                                  .open = fusd_status_open,
+                                                  .unlocked_ioctl = fusd_status_unlocked_ioctl,
+                                                  .read = fusd_status_read,
+                                                  .release = fusd_status_release,
+                                                  .poll = fusd_status_poll,
+};
+#endif
 
 /*************************************************************************/
 

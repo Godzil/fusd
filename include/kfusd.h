@@ -44,6 +44,7 @@
 # define __KFUSD_H__
 
 # include "fusd_msg.h"
+# include <linux/version.h>
 
 /* magic numbers for structure checking; unique w.r.t
  * /usr/src/linux/Documentation/magic-number.txt */
@@ -125,8 +126,11 @@ struct fusd_dev_t_s {
   char *dev_name;
   struct CLASS *clazz;
   int owns_class;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,29)
+  struct class_device *device;
+#else
   struct device *device;
-  
+#endif
   void *private_data;		/* User's private data */
   struct cdev* handle;
   dev_t dev_id;
@@ -269,8 +273,11 @@ static void fusd_vfree(void *ptr);
 /* Functions like this should be in the kernel, but they are not.  Sigh. */
 # ifdef CONFIG_SMP
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,30)
 DECLARE_MUTEX(atomic_ops);
-
+#else
+DEFINE_SEMAPHORE(atomic_ops);
+#endif
 static __inline__ int atomic_inc_and_ret(int *i)
 {
   int val;
