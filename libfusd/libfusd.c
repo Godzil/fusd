@@ -662,11 +662,7 @@ int fusd_return(fusd_file_info_t *file, ssize_t retval)
     iov[0].iov_len = sizeof(fusd_msg_t);
     iov[1].iov_base = msg->data;
     iov[1].iov_len = msg->datalen;
-#if 0
     driver_retval = writev(fd, iov, 2);
-#else
-    driver_retval = ioctl(fd, 0xb16b00b5, iov);
-#endif
   }
   else {
     driver_retval = write(fd, msg, sizeof(fusd_msg_t));
