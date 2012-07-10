@@ -27,7 +27,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  *
  */
- 
+
 
 /*
  * fusd userspace library: functions that know how to properly talk
@@ -104,7 +104,8 @@ void fusd_init()
 {
   static int fusd_init_needed = 1;
 
-  if (fusd_init_needed) {
+  if (fusd_init_needed)
+  {
     int i;
 
     fusd_init_needed = 0;
@@ -128,7 +129,8 @@ int fusd_register(const char *name, const char* clazz, const char* devname, mode
   fusd_init();
 
   /* make sure the name is valid and we have a valid set of fops... */
-  if (name == NULL || fops == NULL) {
+  if (name == NULL || fops == NULL)
+  {
     fprintf(stderr, "fusd_register: invalid name or fops argument\n");
     retval = -EINVAL;
     goto done;
@@ -139,27 +141,33 @@ int fusd_register(const char *name, const char* clazz, const char* devname, mode
    * to register are SKIP_PREFIX (usually "/dev/"), skip over them.
    */
   if (dev_root != NULL && strlen(name) > strlen(dev_root) &&
-      !strncmp(name, dev_root, strlen(dev_root))) {
+      !strncmp(name, dev_root, strlen(dev_root)))
+  {
     name += strlen(dev_root);
   }
 
-  if (strlen(name) > FUSD_MAX_NAME_LENGTH) {
-    fprintf(stderr, "name '%s' too long, sorry :(", name);
+  if (strlen(name) > FUSD_MAX_NAME_LENGTH)
+  {
+    fprintf(stderr, "libfusd: name '%s' too long, sorry :(\n", name);
     retval = -EINVAL;
     goto done;
   }
 
   /* open the fusd control channel */
-  if ((fd = open(FUSD_CONTROL_DEVNAME, O_RDWR | O_NONBLOCK)) < 0) {
+  if ((fd = open(FUSD_CONTROL_DEVNAME, O_RDWR | O_NONBLOCK)) < 0)
+  {
 
     /* if the problem is that /dev/fusd does not exist, return the
      * message "Package not installed", which is hopefully more
      * illuminating than "no such file or directory" */
-    if (errno == ENOENT) {
+    if (errno == ENOENT)
+    {
       fprintf(stderr, "libfusd: %s does not exist; ensure FUSD's kernel module is installed\n",
 	      FUSD_CONTROL_DEVNAME);
       retval = -ENOPKG;
-    } else {
+    }
+    else
+    {
       perror("libfusd: trying to open FUSD control channel");
       retval = -errno;
     }
@@ -167,7 +175,8 @@ int fusd_register(const char *name, const char* clazz, const char* devname, mode
   }
 
   /* fd in use? */
-  if (FUSD_FD_VALID(fd)) {
+  if (FUSD_FD_VALID(fd))
+  {
     retval = -EBADF;
     goto done;
   }
@@ -184,7 +193,8 @@ int fusd_register(const char *name, const char* clazz, const char* devname, mode
   message.parm.register_msg.device_info = device_info;
 
   /* make the request */
-  if (write(fd, &message, sizeof(fusd_msg_t)) < 0) {
+  if (write(fd, &message, sizeof(fusd_msg_t)) < 0)
+  {
     retval = -errno;
     goto done;
   }
@@ -195,34 +205,38 @@ int fusd_register(const char *name, const char* clazz, const char* devname, mode
 
   /* success! */
  done:
-  if (retval < 0) {
+  if (retval < 0)
+  {
     if (fd >= 0)
       close(fd);
     errno = -retval;
     retval = -1;
-  } else {
+  }
+  else
+  {
     errno = 0;
     retval = fd;
   }
-
   return retval;
 }
 
-
 int fusd_unregister(int fd)
 {
-  if (FUSD_FD_VALID(fd)) {
+  int ret = -1;
+  if (FUSD_FD_VALID(fd))
+  {
     /* clear fd location */
     FUSD_SET_FOPS(fd, &null_fops);
     FD_CLR(fd, &fusd_fds);
     /* close */
-    return close(fd);
+    ret = close(fd);
   }
-  
-  else {
+  else
+  {
     errno = EBADF;
-    return -1;
   }
+
+  return ret;
 }
 
 
@@ -241,21 +255,25 @@ void fusd_run(void)
   int i;
 
   /* locate maxmimum fd in use */
-  for (maxfd=0, i=0; i < FD_SETSIZE; i++) {
-    if (FD_ISSET(i, &fusd_fds)) {
+  for (maxfd=0, i=0; i < FD_SETSIZE; i++)
+  {
+    if (FD_ISSET(i, &fusd_fds))
+    {
       maxfd = i;
     }
   }
   maxfd++;
 
 
-  while (1) {
+  while (1)
+  {
     /* select */
     memmove(&tfds, &fusd_fds, sizeof(fd_set));
     status = select(maxfd, &tfds, NULL, NULL, NULL);
 
     /* error? */
-    if (status < 0) {
+    if (status < 0)
+    {
       perror("libfusd: fusd_run: error on select");
       continue;
     }
@@ -263,13 +281,12 @@ void fusd_run(void)
     /* readable? */
     for (i = 0; i < maxfd; i++)
       if (FD_ISSET(i, &tfds))
-	fusd_dispatch(i);
+
+    fusd_dispatch(i);
   }
 }
 
-
 /************************************************************************/
-
 
 /* reads a fusd kernel-to-userspace message from fd, and puts a
  * fusd_msg into the memory pointed to by msg (we assume we are passed
@@ -279,39 +296,51 @@ void fusd_run(void)
  * managed by the caller. */
 static int fusd_get_message(int fd, fusd_msg_t *msg)
 {
+  int ret;
+
   /* read the header part into the kernel */
-  if (read(fd, msg, sizeof(fusd_msg_t)) < 0) {
+  if (read(fd, msg, sizeof(fusd_msg_t)) < 0)
+  {
     if (errno != EAGAIN)
       perror("error talking to FUSD control channel on header read");
-    return -errno;
+    ret = -errno;
+    goto exit;
   }
   msg->data = NULL; /* pointers in kernelspace have no meaning */
 
-  if (msg->magic != FUSD_MSG_MAGIC) {
-    fprintf(stderr, "libfusd magic number failure\n");
-    return -EINVAL;
+  if (msg->magic != FUSD_MSG_MAGIC)
+  {
+    fprintf(stderr, "libfusd: magic number failure\n");
+    ret = -EINVAL;
+    goto exit;
   }
 
   /* if there's a data part to the message, read it from the kernel. */
-  if (msg->datalen) {
-    if ((msg->data = malloc(msg->datalen + 1)) == NULL) {
+  if (msg->datalen)
+  {
+    if ((msg->data = malloc(msg->datalen + 1)) == NULL)
+    {
       fprintf(stderr, "libfusd: can't allocate memory\n");
-      return -ENOMEM;  /* this is bad, we are now unsynced */
+      ret = -ENOMEM;  /* this is bad, we are now unsynced */
+      goto exit;
     }
 
-    if (read(fd, msg->data, msg->datalen) < 0) {
+    if (read(fd, msg->data, msg->datalen) < 0)
+    {
       perror("error talking to FUSD control channel on data read");
       free(msg->data);
       msg->data = NULL;
-      return -EIO;
+      ret = -EIO;
+      goto exit;
     }
 
     /* For convenience, we now ensure that the byte *after* the buffer
      * is set to 0.  (Note we malloc'd one extra byte above.) */
     msg->data[msg->datalen] = '\0';
   }
-
-  return 0;
+  ret = 0;
+exit:
+  return ret;
 }
 
 
@@ -323,11 +352,14 @@ void fusd_fdset_add(fd_set *set, int *max)
 {
   int i;
 
-  for (i = 0; i < FD_SETSIZE; i++) {
-    if (FD_ISSET(i, &fusd_fds)) {
+  for (i = 0; i < FD_SETSIZE; i++)
+  {
+    if (FD_ISSET(i, &fusd_fds))
+    {
       FD_SET(i, set);
-      if (i > *max) {
-	*max = i;
+      if (i > *max)
+      {
+        *max = i;
       }
     }
   }
@@ -345,6 +377,7 @@ void fusd_dispatch_fdset(fd_set *set)
   for (i = 0; i < FD_SETSIZE; i++)
     if (FD_ISSET(i, set) && FD_ISSET(i, &fusd_fds))
       fusd_dispatch(i);
+
 }
 
 
@@ -366,14 +399,16 @@ static int fusd_dispatch_one(int fd, fusd_file_operations_t *fops)
   int user_retval = 0;    /* returned to the user who made the syscall */
 
   /* check for valid, look up ops */
-  if (fops == NULL) {
+  if (fops == NULL)
+  {
     fprintf(stderr, "fusd_dispatch: no fops provided!\n");
     driver_retval = -EBADF;
     goto out_noreply;
   }
 
   /* allocate memory for fusd_msg_t */
-  if ((msg = malloc(sizeof(fusd_msg_t))) == NULL) {
+  if ((msg = malloc(sizeof(fusd_msg_t))) == NULL)
+  {
     driver_retval = -ENOMEM;
     fprintf(stderr, "libfusd: can't allocate memory\n");
     goto out_noreply;
@@ -386,7 +421,8 @@ static int fusd_dispatch_one(int fd, fusd_file_operations_t *fops)
 
   /* allocate file info struct */
   file = malloc(sizeof(fusd_file_info_t));
-  if (NULL == file) {
+  if (NULL == file)
+  {
     fprintf(stderr, "libfusd: can't allocate memory\n");
     driver_retval = -ENOMEM;
     goto out_noreply;
@@ -412,47 +448,58 @@ static int fusd_dispatch_one(int fd, fusd_file_operations_t *fops)
 
   /* right now we only handle fops requests */
   if (msg->cmd != FUSD_FOPS_CALL && msg->cmd != FUSD_FOPS_NONBLOCK &&
-      msg->cmd != FUSD_FOPS_CALL_DROPREPLY) {
+      msg->cmd != FUSD_FOPS_CALL_DROPREPLY)
+  {
     fprintf(stderr, "libfusd: got unknown msg->cmd from kernel\n");
     user_retval = -EINVAL;
     goto send_reply;
   }
-  
+
   /* dispatch on operation type */
   user_retval = -ENOSYS;
   //printf("dispatch_one: subcmd: %d - ", msg->subcmd);
   
-  switch (msg->subcmd) {
+
+  switch (msg->subcmd)
+  {
   case FUSD_OPEN:
     //printf("FUSD_OPEN\n");
     if (fops && fops->open)
       user_retval = fops->open(file);
     break;
+
   case FUSD_CLOSE:
     //printf("FUSD_CLOSE\n");
     if (fops && fops->close)
       user_retval = fops->close(file);
     break;
+
   case FUSD_READ:
     //printf("FUSD_READ\n");
     /* allocate a buffer and make the call */
-    if (fops && fops->read) {
-      if ((msg->data = malloc(msg->parm.fops_msg.length)) == NULL) {
-	user_retval = -ENOMEM;
-	fprintf(stderr, "libfusd: can't allocate memory\n");
-      } else {
-	msg->datalen = msg->parm.fops_msg.length;
-	user_retval = fops->read(file, msg->data, msg->datalen,
-				 &msg->parm.fops_msg.offset);
+    if (fops && fops->read)
+    {
+      if ((msg->data = malloc(msg->parm.fops_msg.length)) == NULL)
+      {
+        user_retval = -ENOMEM;
+        fprintf(stderr, "libfusd: can't allocate memory\n");
+      }
+      else
+      {
+        msg->datalen = msg->parm.fops_msg.length;
+        user_retval = fops->read(file, msg->data, msg->datalen,
+                                 &msg->parm.fops_msg.offset);
       }
     }
     break;
+
   case FUSD_WRITE:
     //printf("FUSD_WRITE\n");
     if (fops && fops->write)
       user_retval = fops->write(file, msg->data, msg->datalen,
 				&msg->parm.fops_msg.offset);
     break;
+
   case FUSD_MMAP:
     //printf("FUSD_MMAP\n");
     if (fops && fops->mmap)
@@ -461,54 +508,58 @@ static int fusd_dispatch_one(int fd, fusd_file_operations_t *fops)
                                &msg->parm.fops_msg.arg.ptr_arg, &msg->parm.fops_msg.length);
     }
     break;
+
   case FUSD_IOCTL:
     //printf("FUSD_IOCTL\n");
-    if (fops && fops->ioctl) {
+    if (fops && fops->ioctl)
+    {
       /* in the case of an ioctl read, allocate a buffer for the
        * driver to write to, IF there isn't already a buffer.  (there
        * might already be a buffer if this is a read+write) */
       if ((_IOC_DIR(msg->parm.fops_msg.cmd) & _IOC_READ) &&
-	  msg->data == NULL) {
-	msg->datalen = _IOC_SIZE(msg->parm.fops_msg.cmd);
-	if ((msg->data = malloc(msg->datalen)) == NULL) {
-	  user_retval = -ENOMEM;
-	  break;
-	}
+           msg->data == NULL)
+      {
+        msg->datalen = _IOC_SIZE(msg->parm.fops_msg.cmd);
+        if ((msg->data = malloc(msg->datalen)) == NULL)
+        {
+          user_retval = -ENOMEM;
+          break;
+        }
       }
       if (msg->data != NULL)
-	user_retval = fops->ioctl(file, msg->parm.fops_msg.cmd, msg->data);
+        user_retval = fops->ioctl(file, msg->parm.fops_msg.cmd, msg->data);
       else
-	user_retval = fops->ioctl(file, msg->parm.fops_msg.cmd,
-				  (void *) msg->parm.fops_msg.arg.ptr_arg);
+        user_retval = fops->ioctl(file, msg->parm.fops_msg.cmd,
+                                  (void *) msg->parm.fops_msg.arg.ptr_arg);
     }
     break;
-    
+
   case FUSD_POLL_DIFF:
      //printf("FUSD_POLL_DIFF\n");
     /* This callback requests notification when an event occurs on a file,
      * e.g. becoming readable or writable */
     if (fops && fops->poll_diff)
       user_retval = fops->poll_diff(file, msg->parm.fops_msg.cmd);
-    break;    
-  
+    break;
+
   case FUSD_UNBLOCK:
     //printf("FUSD_UNBLOCK\n");
     /* This callback is called when a system call is interrupted */
     if (fops && fops->unblock)
-      user_retval = fops->unblock(file);    
+      user_retval = fops->unblock(file);
     break;
-    
+
   default:
     fprintf(stderr, "libfusd: Got unsupported operation\n");
     user_retval = -ENOSYS;
     break;
   }
-  
+
   goto send_reply;
 
 
   /* out_noreply is only used for handling errors */
- out_noreply:
+out_noreply:
   if (msg->data != NULL)
     free(msg->data);
   if (msg != NULL)
@@ -516,21 +567,26 @@ static int fusd_dispatch_one(int fd, fusd_file_operations_t *fops)
   goto done;
 
   /* send_reply is only used for success */
- send_reply:
-  if (-user_retval <= 0xff) {
+send_reply:
+  if (-user_retval <= 0xff)
+  {
     /* 0xff is the maximum legal return value (?) - return val to user */
     driver_retval = fusd_return(file, user_retval);
-  } else {
+  }
+  else
+  {
     /* if we got a FUSD_NOREPLY, don't free the msg structure */
     driver_retval = 0;
   }
 
   /* this is common to both errors and success */
- done:
-  if (driver_retval < 0) {
+done:
+  if (driver_retval < 0)
+  {
     errno = -driver_retval;
     driver_retval = -1;
   }
+
   return driver_retval;
 }
 
@@ -550,7 +606,8 @@ void fusd_dispatch(int fd)
   fusd_file_operations_t *fops = NULL;
 
   /* make sure we have a valid FD, and get its fops structure */
-  if (!FUSD_FD_VALID(fd)) {
+  if (!FUSD_FD_VALID(fd))
+  {
     errno = EBADF;
     retval = -1;
     fprintf(stderr, "libfusd: not a valid FUSD FD\n");
@@ -559,7 +616,8 @@ void fusd_dispatch(int fd)
   fops = FUSD_GET_FOPS(fd);
 
   /* now keep dispatching until a dispatch returns an error */
-  do {
+  do
+  {
     retval = fusd_dispatch_one(fd, fops);
 
     if (retval >= 0)
@@ -569,14 +627,16 @@ void fusd_dispatch(int fd)
   /* if we've dispatched at least one message successfully, and then
    * stopped because of EAGAIN - do not report an error.  this is the
    * common case. */
-  if (num_dispatches > 0 && errno == EAGAIN) {
+  if (num_dispatches > 0 && errno == EAGAIN)
+  {
     retval = 0;
     errno = 0;
   }
 
  out:
   if (retval < 0 && errno != EPIPE)
-    fprintf(stderr, "libfusd: fusd_dispatch error on fd %d: [%d] %m \n", fd, retval);
+    fprintf(stderr, "libfusd: fusd_dispatch error on fd %d: [%d] %m\n", fd, retval);
+
 }
 
 
@@ -612,6 +672,7 @@ int fusd_return(fusd_file_info_t *file, ssize_t retval)
   fusd_msg_t *msg = NULL;
   int fd;
   int driver_retval = 0;
+  int ret;
   struct iovec iov[2];
 
   if (file == NULL)
@@ -643,24 +704,29 @@ int fusd_return(fusd_file_info_t *file, ssize_t retval)
     goto free_memory;
 
   /* do we copy data back to kernel?  how much? */
-  switch(msg->subcmd) {
+  switch(msg->subcmd)
+  {
   case FUSD_READ:
     /* these operations can return data to userspace */
-    if (retval > 0) {
-      msg->datalen = MIN(retval, msg->parm.fops_msg.length);
+    if (retval > 0)
+    {
+      msg->datalen = MIN((int)retval, (int)msg->parm.fops_msg.length);
       retval = msg->datalen;
-    } else {
+    }
+    else
+    {
       msg->datalen = 0;
     }
     break;
+
   case FUSD_IOCTL:
     /* ioctl CAN (in read mode) return data to userspace */
-    if ((retval == 0) && 
-	(_IOC_DIR(msg->parm.fops_msg.cmd) & _IOC_READ))
+    if (/*(retval == 0) && */	(_IOC_DIR(msg->parm.fops_msg.cmd) & _IOC_READ) )
       msg->datalen = _IOC_SIZE(msg->parm.fops_msg.cmd);
     else
       msg->datalen = 0;
     break;
+
   default:
     /* open, close, write, etc. do not return data */
     msg->datalen = 0;
@@ -676,7 +742,8 @@ int fusd_return(fusd_file_info_t *file, ssize_t retval)
   /* pid is NOT copied back. */
 
   /* send message to kernel */
-  if (msg->datalen && msg->data != NULL) {
+  if (msg->datalen && msg->data != NULL)
+  {
     //printf("(msg->datalen [%d] && msg->data != NULL [%p]", msg->datalen, msg->data);
     iov[0].iov_base = msg;
     iov[0].iov_len = sizeof(fusd_msg_t);
@@ -684,20 +751,19 @@ int fusd_return(fusd_file_info_t *file, ssize_t retval)
     iov[1].iov_len = msg->datalen;
     driver_retval = writev(fd, iov, 2);
   }
-  else {
+  else
+  {
     driver_retval = write(fd, msg, sizeof(fusd_msg_t));
   }
 
 free_memory:
   FILE_UNLOCK(file);
- free_memory:
+
   fusd_destroy(file);
 
   ret = 0;
   if (driver_retval < 0)
-    return -errno;
-  else
-    return 0;
+    ret = -errno;
    goto exit;
 
 exit_unlock:
@@ -716,12 +782,12 @@ char *fusd_unparse_flags(int flags)
   static char ringbuf[RING][5];
   char *s = ringbuf[i];
   i = (i + 1) % RING;
-  
-  sprintf(s, "%c%c%c", 
+
+  sprintf(s, "%c%c%c",
 	  (flags & FUSD_NOTIFY_INPUT)?'R':'-',
 	  (flags & FUSD_NOTIFY_OUTPUT)?'W':'-',
 	  (flags & FUSD_NOTIFY_EXCEPT)?'E':'-');
-  
+
   return s;
 }
 #undef RING
