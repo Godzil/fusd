@@ -66,6 +66,8 @@ __BEGIN_DECLS
 
 #define FUSD_KOR_HACKED_VERSION
 
+#ifndef __KERNEL__
+
 struct fusd_file_info; /* forward decl */
 
 typedef
@@ -105,6 +107,7 @@ struct fusd_file_info {
 
   /* other info might be added later, e.g. state needed to complete
      operations... */
+  pthread_mutex_t lock;
 
   /* request message associated with this call */
   int fd;
@@ -112,8 +115,8 @@ struct fusd_file_info {
 
 } fusd_file_info_t;
 
-
-
+#define FILE_LOCK(__f) pthread_mutex_lock(&__f->lock)
+#define FILE_UNLOCK(__f) pthread_mutex_unlock(&__f->lock)
 
 /*************************** Library Functions ****************************/
 
@@ -277,6 +280,8 @@ static inline int fusd_get_poll_diff_cached_state(struct fusd_file_info *file)
 
 /* returns static string representing the flagset (e.g. RWE) */
 char *fusd_unparse_flags(int flags);
+
+#endif /* !__KERNEL__ */
 
 #ifndef __KERNEL__
 __END_DECLS

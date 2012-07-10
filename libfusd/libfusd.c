@@ -53,6 +53,11 @@ char libfusd_c_id[] = "$Id: libfusd.c 12351 2007-01-19 07:22:54Z xiphmont $";
 #include <string.h>
 #include <time.h>
 
+#include <pthread.h>
+
+#include <unistd.h>
+#include <sys/syscall.h>
+
 #include "fusd.h"
 #include "fusd_msg.h"
 
@@ -72,7 +77,7 @@ char *dev_root = NULL;
  * struct for each fusd fd.
  */
 static fusd_file_operations_t fusd_fops_set[FD_SETSIZE];
-fusd_file_operations_t null_fops = { NULL };
+fusd_file_operations_t null_fops = { NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL };
 
 /*
  * accessor macros
@@ -389,6 +394,11 @@ static int fusd_dispatch_one(int fd, fusd_file_operations_t *fops)
 
   /* fill the file info struct */
   memset(file, '\0', sizeof(fusd_file_info_t));
+
+  pthread_mutex_init(&file->lock, NULL);
+
+  FILE_LOCK(file);
+
   file->fd = fd;
   file->device_info = msg->parm.fops_msg.device_info;
   file->private_data = msg->parm.fops_msg.private_info;
@@ -397,6 +407,8 @@ static int fusd_dispatch_one(int fd, fusd_file_operations_t *fops)
   file->uid = msg->parm.fops_msg.uid;
   file->gid = msg->parm.fops_msg.gid;
   file->fusd_msg = msg;  
+
+  FILE_UNLOCK(file);
 
   /* right now we only handle fops requests */
   if (msg->cmd != FUSD_FOPS_CALL && msg->cmd != FUSD_FOPS_NONBLOCK &&
@@ -602,20 +614,28 @@ int fusd_return(fusd_file_info_t *file, ssize_t retval)
   int driver_retval = 0;
   struct iovec iov[2];
 
-  if (file == NULL) {
+  if (file == NULL)
+  {
     fprintf(stderr, "fusd_return: NULL file\n");
-    return -EINVAL;
+    ret = -EINVAL;
+    goto exit;
   }
+
+  FILE_LOCK(file);
 
   fd = file->fd;
-  if (!FUSD_FD_VALID(fd)) {
+  if (!FUSD_FD_VALID(fd))
+  {
     fprintf(stderr, "fusd_return: badfd (fd %d)\n", fd);
-    return -EBADF;
+    ret = -EBADF;
+    goto exit_unlock;
   }
 
-  if ((msg = file->fusd_msg) == NULL) {
+  if ((msg = file->fusd_msg) == NULL)
+  {
     fprintf(stderr, "fusd_return: fusd_msg is gone\n");
-    return -EINVAL;
+    ret = -EINVAL;
+    goto exit_unlock;
   }
 
   /* if this was a "DONTREPLY" message, just free the struct */
@@ -668,13 +688,23 @@ int fusd_return(fusd_file_info_t *file, ssize_t retval)
     driver_retval = write(fd, msg, sizeof(fusd_msg_t));
   }
 
+free_memory:
+  FILE_UNLOCK(file);
  free_memory:
   fusd_destroy(file);
 
+  ret = 0;
   if (driver_retval < 0)
     return -errno;
   else
     return 0;
+   goto exit;
+
+exit_unlock:
+  FILE_UNLOCK(file);
+
+exit:
+  return ret;
 }
 
 
