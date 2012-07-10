@@ -650,13 +650,26 @@ void fusd_dispatch(int fd)
  */
 void fusd_destroy(struct fusd_file_info *file)
 {
-  if (file == NULL)
-    return;
+   if (file == NULL)
+      return;
 
-  if (file->fusd_msg->data != NULL)
-    free(file->fusd_msg->data);
-  free(file->fusd_msg);
-  free(file);
+   FILE_LOCK(file);
+
+   if (file->fusd_msg != NULL)
+   {
+      if (file->fusd_msg->data != NULL)
+      {
+         free(file->fusd_msg->data);
+         file->fusd_msg->data = NULL;
+      }
+      free(file->fusd_msg);
+      file->fusd_msg = NULL;
+   }
+   FILE_UNLOCK(file);
+
+   pthread_mutex_destroy(&file->lock);
+
+   free(file);
 }
 
 
