@@ -38,7 +38,7 @@
  * Copyright (c) 2001, Sensoria Corporation
  * Copyright (c) 2002-2003, Regents of the University of California
  * Copyright (c) 2007 Monty and Xiph.Org
- * Copyright (c) 2009-2011 Manoel Trapier <godzil@godzil.net>
+ * Copyright (c) 2009-2012 Manoel Trapier <godzil@godzil.net>
  *
  * $Id: kfusd.c 12354 2007-01-19 17:26:14Z xiphmont $
  */
@@ -194,6 +194,11 @@ struct class_private {
 
 #endif
 
+/*
+	struct sysfs_dirent *attr_sd = dentry->d_fsdata;
+	struct kobject *kobj = attr_sd->s_parent->s_dir.kobj;
+*/
+
 static inline struct kobject * to_kobj (struct dentry * dentry)
 {
    struct sysfs_dirent * sd = dentry->d_fsdata;
@@ -201,7 +206,7 @@ static inline struct kobject * to_kobj (struct dentry * dentry)
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
       return ((struct kobject *) sd->s_element );
 #else
-      return ((struct kobject *) sd->s_dir.kobj );
+      return ((struct kobject *) sd->s_parent->s_dir.kobj );
 #endif
    else
       return NULL;
@@ -257,7 +262,7 @@ DEFINE_SEMAPHORE (fusd_devlist_sem);
 
 //#ifdef MODULE_LICENSE
 MODULE_AUTHOR ("Jeremy Elson <jelson@acm.org> (c)2001");
-MODULE_AUTHOR ("Manoel Trapier <godzil@godzil.net> (c)2009-2011");
+MODULE_AUTHOR ("Manoel Trapier <godzil@godzil.net> (c)2009-2012");
 MODULE_LICENSE ("GPL");
 //#endif
 
@@ -315,7 +320,12 @@ STATIC void rdebug_real (char *fmt, ...)
 
 #   define MAX_MEM_DEBUG 10000
 
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,30)
 DECLARE_MUTEX (fusd_memdebug_sem);
+#else
+DEFINE_SEMAPHORE (fusd_memdebug_sem);
+#endif
 
 typedef struct
 {
@@ -464,6 +474,7 @@ STATIC inline void free_fusd_msg (fusd_msg_t **fusd_msg)
       VFREE(( *fusd_msg )->data);
       ( *fusd_msg )->data = NULL;
    }
+   RDEBUG(1, "Freeing fusd_msg [%p] then set to NULL", fusd_msg);
    KFREE(*fusd_msg);
    *fusd_msg = NULL;
 }
@@ -2194,7 +2205,7 @@ STATIC int fusd_register_device (fusd_dev_t *fusd_dev,
 
       if ( sysfs )
       {
-	 /* Get FS superblock */
+         /* Get FS superblock */
          sb = sget(sysfs, systest, NULL, NULL);
 
          /* because put_filesystem isn't exported */
@@ -2209,7 +2220,7 @@ STATIC int fusd_register_device (fusd_dev_t *fusd_dev,
             {
                struct qstr name;
 
-	       /* Search for directory "class" in the root of this filesystem */
+	            /* Search for directory "class" in the root of this filesystem */
                name.name = "class";
                name.len = 5;
                name.hash = full_name_hash(name.name, name.len);
@@ -2217,7 +2228,7 @@ STATIC int fusd_register_device (fusd_dev_t *fusd_dev,
 
                if ( classdir )
                {
-		  /* Found, now search for class wanted name */
+                  /* Found, now search for class wanted name */
                   name.name = register_msg.clazz;
                   name.len = strlen(name.name);
                   name.hash = full_name_hash(name.name, name.len);
@@ -2229,15 +2240,16 @@ STATIC int fusd_register_device (fusd_dev_t *fusd_dev,
                      struct kobject *ko = to_kobj(classdir2);
                      sys_class = ( ko ? to_class(ko)->class : NULL );
 
-	             if ( sys_class )
-		     {
+#if 0
+                     if ( sys_class )
+                     {
                         /* W T F ???? Using an existing sys_class will led to a NULL pointer crash
                          * during device creation.. Need more investigation, this comportement is clearly not
                          * normal. */
-		        RDEBUG(1, "ERROR: Using existing class name is currently unsported !!!");
-			goto register_failed4;
-		     }
-
+                        RDEBUG(1, "ERROR: Using existing class name is currently unsported !!!");
+                        goto register_failed4;
+                     }
+#endif
                      if ( !sys_class )
                         RDEBUG(2, "WARNING: sysfs entry for %s has no kobject!\n", register_msg.clazz);
                   }
@@ -2630,7 +2642,7 @@ STATIC ssize_t fusd_write (struct file *file,
    RDEBUG(1, "%s: [%p:%p:%d:%p] [sl: %d]!!", __func__, file, buffer, length, offset, sizeof (fusd_msg_t ));
    return fusd_process_write(file, buffer, length, NULL, 0);
 }
-
+#ifndef HAVE_UNLOCKED_IOCTL
 STATIC ssize_t fusd_writev (struct file *file,
                             const struct iovec *iov,
                             unsigned long count,
@@ -2646,6 +2658,23 @@ STATIC ssize_t fusd_writev (struct file *file,
                              iov[0].iov_base, iov[0].iov_len,
                              iov[1].iov_base, iov[1].iov_len);
 }
+#else
+STATIC ssize_t fusd_aio_write (struct kiocb *iocb,
+                               const struct iovec *iov, 
+                               unsigned long count,
+                               loff_t offset)                            
+{
+   if ( count != 2 )
+   {
+      RDEBUG(2, "fusd_writev: got illegal iov count of %ld", count);
+      return -EINVAL;
+   }
+
+   return fusd_process_write(iocb->ki_filp,
+                             iov[0].iov_base, iov[0].iov_len,
+                             iov[1].iov_base, iov[1].iov_len);
+}
+#endif
 
 #ifndef HAVE_UNLOCKED_IOCTL
 STATIC int fusd_ioctl (struct inode *inode, struct file *file,
@@ -2656,6 +2685,7 @@ STATIC long fusd_unlocked_ioctl (struct file *file,
 #endif
 {
    void __user *argp = (void __user *) arg;
+#if 0
    struct iovec iov;
 
    if ( ( argp != NULL ) && ( cmd == 0xb16b00b5 ) )
@@ -2672,6 +2702,7 @@ STATIC long fusd_unlocked_ioctl (struct file *file,
          return -EIO;
       }
    }
+#endif
    RDEBUG(2, "%s: got illegal ioctl #%08X# Or ARG is null [%p]", __func__, cmd, argp);
    return -EINVAL;
 }
@@ -2882,7 +2913,7 @@ STATIC struct file_operations fusd_fops = {
                                            .open = fusd_open,
                                            .read = fusd_read,
                                            .write = fusd_write,
-                                           //writev:   fusd_writev,
+                                           .aio_write = fusd_aio_write,
                                            .unlocked_ioctl = fusd_unlocked_ioctl,
                                            .release = fusd_release,
                                            .poll = fusd_poll,
