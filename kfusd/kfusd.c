@@ -254,10 +254,11 @@ STATIC DECLARE_WAIT_QUEUE_HEAD (new_device_wait);
 
 /* the list of valid devices, and sem to protect it */
 LIST_HEAD (fusd_devlist_head);
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,30)
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,33)
 DECLARE_MUTEX (fusd_devlist_sem);
 #else
-DEFINE_SEMAPHORE (fusd_devlist_sem);
+DEFINE_SEMAPHORE (fusd_make devlist_sem);
 #endif
 
 //#ifdef MODULE_LICENSE
