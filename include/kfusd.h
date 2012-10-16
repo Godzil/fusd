@@ -273,7 +273,7 @@ static void fusd_vfree(void *ptr);
 /* Functions like this should be in the kernel, but they are not.  Sigh. */
 # ifdef CONFIG_SMP
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,30)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,35)
 DECLARE_MUTEX(atomic_ops);
 #else
 DEFINE_SEMAPHORE(atomic_ops);
