@@ -258,7 +258,7 @@ LIST_HEAD (fusd_devlist_head);
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,33)
 DECLARE_MUTEX (fusd_devlist_sem);
 #else
-DEFINE_SEMAPHORE (fusd_make devlist_sem);
+DEFINE_SEMAPHORE (fusd_devlist_sem);
 #endif
 
 //#ifdef MODULE_LICENSE
