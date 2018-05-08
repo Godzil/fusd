@@ -78,6 +78,10 @@
 #include <linux/device.h>
 #include <linux/highmem.h>
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
+#include <linux/sched/signal.h>
+#endif
+
 #include <asm/atomic.h>
 #include <asm/uaccess.h>
 #include <asm/ioctl.h>
@@ -130,6 +134,23 @@
 #   define CLASS_DEVICE_DESTROY(a, b) device_destroy(a, b)
 #else
 #   define CLASS_DEVICE_DESTROY(a, b) device_destroy(a, b)
+#endif
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 0)
+//result = GET_USER_PAGES(mmap_instance->fusd_dev->task, mmap_instance->fusd_dev->task->mm,
+//                           mmap_instance->addr + offset, 1, 1, 0, &page, NULL);
+#define GET_USER_PAGES(t,m,s,n,w,f,p,v) get_user_pages_remote(t,m,s,n,(w?FOLL_WRITE:0)|(f?FOLL_FORCE:0),p,v, NULL)
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(4, 6, 0)
+
+#define GET_USER_PAGES(t,m,s,n,w,f,p,v) get_user_pages_remote(t,m,s,n,w,f,p,v)
+#else
+#define GET_USER_PAGES(t,m,s,n,w,f,p,v) get_user_pages(t,m,s,n,w,f,p,v)
+#endif
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 8, 0)
+#define FULL_NAME_HASH(a, b) full_name_hash(0, a, b)
+#else
+#define FULL_NAME_HASH(a, b) full_name_hash(a, b)
 #endif
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,19)
@@ -847,7 +868,7 @@ STATIC int fusd_fops_call_send (fusd_file_t *fusd_file_arg,
 
    /* fill the rest of the structure */
    fusd_msg->parm.fops_msg.pid = current->pid;
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,29)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 29)
    fusd_msg->parm.fops_msg.uid = current_uid();
    fusd_msg->parm.fops_msg.gid = current_gid();
 #endif
@@ -1149,7 +1170,7 @@ int fusd_dev_add_file (struct file *file, fusd_dev_t *fusd_dev, fusd_file_t **fu
    init_waitqueue_head(&fusd_file->file_wait);
    init_waitqueue_head(&fusd_file->poll_wait);
    INIT_LIST_HEAD(&fusd_file->transactions);
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,30)   
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 30)
    init_MUTEX(&fusd_file->file_sem);
    init_MUTEX(&fusd_file->transactions_sem);
 #else
@@ -1711,11 +1732,14 @@ static void fusd_client_mm_open (struct vm_area_struct * vma);
 static void fusd_client_mm_close (struct vm_area_struct * vma);
 
 /* int (*fault)(struct vm_area_struct *vma, struct vm_fault *vmf); */
-#if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,30)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,11,0)
+static int fusd_client_fault (struct vm_fault *vmf);
+#elif LINUX_VERSION_CODE > KERNEL_VERSION(2,6,30)
 static int fusd_client_fault (struct vm_area_struct *vma, struct vm_fault *vmf);
 #else
 static int fusd_client_fault (struct vm_area_struct *vma, struct vm_fault *vmf, int *type);
 #endif
+
 static struct vm_operations_struct fusd_remap_vm_ops ={
                                                        .open = fusd_client_mm_open,
                                                        .close = fusd_client_mm_close,
@@ -1783,7 +1807,7 @@ static int fusd_client_mmap (struct file *file, struct vm_area_struct * vma)
    }
 
    /* and wait for the reply */
-   /* todo: store and retrieve the transid from the interrupted messsage */
+   /* todo: store and retrieve the transid from the interrupted message */
    retval = fusd_fops_call_wait(fusd_file, &reply, transaction);
 
    mmap_instance =
@@ -1800,7 +1824,11 @@ static int fusd_client_mmap (struct file *file, struct vm_area_struct * vma)
 
    vma->vm_private_data = mmap_instance;
    vma->vm_ops = &fusd_remap_vm_ops;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 7, 0)
+   vma->vm_flags |= (VM_DONTEXPAND | VM_DONTDUMP);
+#else
    vma->vm_flags |= VM_RESERVED;
+#endif
 
    fusd_client_mm_open(vma);
 
@@ -1817,24 +1845,36 @@ invalid_file:
    return -EPIPE;
 }
 
-#if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,30)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
+static int fusd_client_fault (struct vm_fault *vmf)
+#elif LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 30)
 static int fusd_client_fault (struct vm_area_struct *vma, struct vm_fault *vmf)
 #else
 static int fusd_client_fault (struct vm_area_struct *vma, struct vm_fault *vmf, int *type)
 #endif
 {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
+   struct vm_area_struct *vma = vmf->vma;
+#endif
+
    struct fusd_mmap_instance* mmap_instance = (struct fusd_mmap_instance*) vma->vm_private_data;
    unsigned long offset;
    struct page *page = NULL;
    int result;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+   offset = ( (unsigned long) vmf->address - vma->vm_start ) + ( vma->vm_pgoff << PAGE_SHIFT );
+#else
    offset = ( (unsigned long) vmf->virtual_address - vma->vm_start ) + ( vma->vm_pgoff << PAGE_SHIFT );
+#endif
+
    // todo: worry about size
    if ( offset > mmap_instance->size )
       goto out;
 
    down_read(&mmap_instance->fusd_dev->task->mm->mmap_sem);
-   result = get_user_pages(mmap_instance->fusd_dev->task, mmap_instance->fusd_dev->task->mm, mmap_instance->addr + offset, 1, 1, 0, &page, NULL);
+   result = GET_USER_PAGES(mmap_instance->fusd_dev->task, mmap_instance->fusd_dev->task->mm,
+                           mmap_instance->addr + offset, 1, 1, 0, &page, NULL);
    up_read(&mmap_instance->fusd_dev->task->mm->mmap_sem);
 
 
@@ -2207,8 +2247,11 @@ STATIC int fusd_register_device (fusd_dev_t *fusd_dev,
       if ( sysfs )
       {
          /* Get FS superblock */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 6, 0)
+         sb = sget(sysfs, systest, NULL, 0, NULL);
+#else
          sb = sget(sysfs, systest, NULL, NULL);
-
+#endif
          /* because put_filesystem isn't exported */
          module_put(sysfs->owner);
 
@@ -2224,7 +2267,8 @@ STATIC int fusd_register_device (fusd_dev_t *fusd_dev,
 	            /* Search for directory "class" in the root of this filesystem */
                name.name = "class";
                name.len = 5;
-               name.hash = full_name_hash(name.name, name.len);
+               name.hash = FULL_NAME_HASH(name.name, name.len);
+
                classdir = d_lookup(root, &name);
 
                if ( classdir )
@@ -2232,7 +2276,7 @@ STATIC int fusd_register_device (fusd_dev_t *fusd_dev,
                   /* Found, now search for class wanted name */
                   name.name = register_msg.clazz;
                   name.len = strlen(name.name);
-                  name.hash = full_name_hash(name.name, name.len);
+                  name.hash = FULL_NAME_HASH(name.name, name.len);
                   classdir2 = d_lookup(classdir, &name);
 
                   if ( classdir2 )
@@ -2659,6 +2703,31 @@ STATIC ssize_t fusd_writev (struct file *file,
                              iov[0].iov_base, iov[0].iov_len,
                              iov[1].iov_base, iov[1].iov_len);
 }
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0)
+ssize_t fusd_write_iter (struct kiocb *iocb, struct iov_iter *iov)
+{
+   unsigned long count = iov_iter_count(iov);
+   char *msg, *data;
+   size_t msg_len, data_len;
+
+   if ( count != 2 )
+   {
+      RDEBUG(2, "fusd_writev: got illegal iov count of %ld", count);
+      return -EINVAL;
+   }
+
+   msg = iov->iov->iov_base + iov->iov_offset;
+   msg_len = iov_iter_single_seg_count(iov);
+
+   iov_iter_advance(iov, msg_len);
+
+   data = iov->iov->iov_base + iov->iov_offset;
+   data_len = iov_iter_single_seg_count(iov);
+
+   return fusd_process_write(iocb->ki_filp,
+                             msg, msg_len,
+                             data, data_len);
+}
 #else
 STATIC ssize_t fusd_aio_write (struct kiocb *iocb,
                                const struct iovec *iov, 
@@ -2685,8 +2754,8 @@ STATIC long fusd_unlocked_ioctl (struct file *file,
                        unsigned int cmd, unsigned long arg)
 #endif
 {
-   void __user *argp = (void __user *) arg;
 #if 0
+   void __user *argp = (void __user *) arg;
    struct iovec iov;
 
    if ( ( argp != NULL ) && ( cmd == 0xb16b00b5 ) )
@@ -2914,7 +2983,11 @@ STATIC struct file_operations fusd_fops = {
                                            .open = fusd_open,
                                            .read = fusd_read,
                                            .write = fusd_write,
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0)
+                                           .write_iter = fusd_write_iter,
+#else
                                            .aio_write = fusd_aio_write,
+#endif
                                            .unlocked_ioctl = fusd_unlocked_ioctl,
                                            .release = fusd_release,
                                            .poll = fusd_poll,

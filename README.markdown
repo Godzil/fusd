@@ -6,12 +6,16 @@ FUSD: A Linux Framework for User-Space Devices
 
 This is FUSD snapshot 20110401, released 18 January 2012. This fork is based
 on the found on the xiph.org SVN tracker. ( http://svn.xiph.org/trunk/fusd ) 
-They seems to no longuer update this tool (since 11 January 2007) and since it
-longuer compile with recent Linux kernel (at around 2.6.21) and since I need
-it in personal project, I ported it to newer version (current version is 2.6.32)
+They seems to no longer update this tool (since 11 January 2007) and since it
+longer compile with recent Linux kernel (at around 2.6.21) and since I need
+it in personal project, I ported it to newer version (current version is 2.6.32).
+It is currently no officialy supporting newer kernel, but changes are currently 
+going on to support newer kernel up to 4.15. It is currently building under this
+line, but don't expect it to work.
+ 
 
 Some feature are still missing missing or buggy form the Xiph version (due to
-changes on the kernel source tree), but it's completly useable.
+changes on the kernel source tree), but it is still usable.
 
 The official URL for this fork is:
 
@@ -53,7 +57,7 @@ include the following rule:
 
 5. Verify the fusd devices /dev/fusd/status and /dev/fusd/control
 exist. If the modprobe succeeds but no fusd devices appear,
-doublecheck the udev rule config change and make sure udevd restarted
+double-check the udev rule config change and make sure udevd restarted
 successfully. The kfusd kernel module must be inserted after udev has
 been correctly configured and restarted.
 
