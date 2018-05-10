@@ -93,6 +93,7 @@
 #ifndef GIT_DESCRIBE
 #define GIT_DESCRIBE "unknownversion-dirty"
 #endif
+
 /* Define this if you want to emit debug messages (adds ~8K) */
 //#define CONFIG_FUSD_DEBUG
 
@@ -155,88 +156,6 @@
 #else
 #define FULL_NAME_HASH(a, b) full_name_hash(a, b)
 #endif
-
-#if LINUX_VERSION_CODE > KERNEL_VERSION(2,6,19)
-
-struct sysfs_elem_dir
-{
-   struct kobject *kobj;
-   /* children list starts here and goes through sd->s_sibling */
-   struct sysfs_dirent *children;
-};
-
-struct sysfs_elem_symlink
-{
-   struct sysfs_dirent *target_sd;
-};
-
-struct sysfs_elem_attr
-{
-   struct attribute *attr;
-   struct sysfs_open_dirent *open;
-};
-
-struct sysfs_elem_bin_attr
-{
-   struct bin_attribute *bin_attr;
-   struct hlist_head buffers;
-};
-
-struct sysfs_dirent
-{
-   atomic_t s_count;
-   atomic_t s_active;
-   struct sysfs_dirent *s_parent;
-   struct sysfs_dirent *s_sibling;
-   const char *s_name;
-
-   union
-   {
-      struct sysfs_elem_dir s_dir;
-      struct sysfs_elem_symlink s_symlink;
-      struct sysfs_elem_attr s_attr;
-      struct sysfs_elem_bin_attr s_bin_attr;
-   };
-
-   unsigned int s_flags;
-   ino_t s_ino;
-   umode_t s_mode;
-   struct sysfs_inode_attrs *s_iattr;
-};
-
-struct class_private {
-	struct kset class_subsys;
-	struct klist class_devices;
-	struct list_head class_interfaces;
-	struct kset class_dirs;
-	struct mutex class_mutex;
-	struct class *class;
-};
-
-#define to_class(obj)	\
-	container_of(obj, struct class_private, class_subsys.kobj)
-
-#endif
-
-/*
-	struct sysfs_dirent *attr_sd = dentry->d_fsdata;
-	struct kobject *kobj = attr_sd->s_parent->s_dir.kobj;
-*/
-
-static inline struct kobject * to_kobj (struct dentry * dentry)
-{
-   struct sysfs_dirent * sd = dentry->d_fsdata;
-   if ( sd )
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20)
-      return ((struct kobject *) sd->s_element );
-#else
-      return ((struct kobject *) sd->s_parent->s_dir.kobj );
-#endif
-   else
-      return NULL;
-}
-
-//#define to_class(obj) container_of(obj, struct class, subsys.kset.kobj)
 
 /**************************************************************************/
 
@@ -2240,132 +2159,11 @@ STATIC int fusd_register_device (fusd_dev_t *fusd_dev,
       goto register_failed3;
    }
 
-   /* look up class in sysfs */
-   {
-      struct CLASS *sys_class = NULL;
-      struct file_system_type *sysfs = get_fs_type("sysfs");
-      struct dentry *classdir = NULL;
-      struct dentry *classdir2 = NULL;
-      struct super_block *sb = NULL;
 
-      if ( sysfs )
-      {
-         /* Get FS superblock */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 6, 0)
-         sb = sget(sysfs, systest, NULL, 0, NULL);
-#else
-         sb = sget(sysfs, systest, NULL, NULL);
-#endif
-         /* because put_filesystem isn't exported */
-         module_put(sysfs->owner);
+	fusd_dev->device = CLASS_DEVICE_CREATE(fusd_class, NULL, fusd_dev->dev_id, NULL, fusd_dev->dev_name);
 
-         if ( sb )
-         {
-            /* Take root entry from SuperBlock */
-            struct dentry *root = sb->s_root;
-		
-            if ( root )
-            {
-               struct qstr name;
 
-	            /* Search for directory "class" in the root of this filesystem */
-               name.name = "class";
-               name.len = 5;
-               name.hash = FULL_NAME_HASH(name.name, name.len);
 
-               classdir = d_lookup(root, &name);
-
-               if ( classdir )
-               {
-                  /* Found, now search for class wanted name */
-                  name.name = register_msg.clazz;
-                  name.len = strlen(name.name);
-                  name.hash = FULL_NAME_HASH(name.name, name.len);
-                  classdir2 = d_lookup(classdir, &name);
-
-                  if ( classdir2 )
-                  {
-                     // jackpot.  extract the class.
-                     struct kobject *ko = to_kobj(classdir2);
-                     sys_class = ( ko ? to_class(ko)->class : NULL );
-
-#if 0
-                     if ( sys_class )
-                     {
-                        /* W T F ???? Using an existing sys_class will led to a NULL pointer crash
-                         * during device creation.. Need more investigation, this comportement is clearly not
-                         * normal. */
-                        RDEBUG(1, "ERROR: Using existing class name is currently unsported !!!");
-                        goto register_failed4;
-                     }
-#endif
-                     if ( !sys_class )
-                        RDEBUG(2, "WARNING: sysfs entry for %s has no kobject!\n", register_msg.clazz);
-                  }
-
-               }
-               else
-               {
-                  RDEBUG(2, "WARNING: sysfs does not list a class directory!\n");
-               }
-            }
-            else
-            {
-               RDEBUG(2, "WARNING: unable to access root firectory in sysfs!\n");
-            }
-         }
-         else
-         {
-            RDEBUG(2, "WARNING: unable to access superblock for sysfs!\n");
-         }
-      }
-      else
-      {
-         RDEBUG(2, "WARNING: sysfs not mounted or unavailable!\n");
-      }
-
-      if ( sys_class )
-      {
-         RDEBUG(3, "Found entry for class '%s' in sysfs\n", register_msg.clazz);
-         fusd_dev->clazz = sys_class;
-         fusd_dev->owns_class = 0;
-      }
-      else
-      {
-         RDEBUG(3, "Sysfs has no entry for '%s'; registering new class\n", register_msg.clazz);
-         fusd_dev->clazz = class_create(THIS_MODULE, fusd_dev->class_name);
-         if ( IS_ERR(fusd_dev->clazz) )
-         {
-            error = PTR_ERR(fusd_dev->clazz);
-            printk(KERN_ERR "class_create failed status: %d\n", error);
-            goto register_failed4;
-         }
-         fusd_dev->owns_class = 1;
-      }
-
-      if ( classdir )
-         dput(classdir);
-      if ( classdir2 )
-         dput(classdir2);
-
-      if ( sb )
-      {
-         up_write(&sb->s_umount);
-         deactivate_super(sb);
-      }
-   }
-
-   /* Dump sys_class */
-   RDEBUG(9, "fusd_dev->clazz = { .name='%s' .owner=%p .class_attrs=%p\n"
-             ".dev_attrs=%p .dev_kobj=%p .dev_uevent=%p\n"
-	     ".devnode=%p .class_release=%p .dev_release=%p\n"
-             ".suspend=%p .resume=%p .pm=%p\n"
-             ".p = %p };", 
-	     fusd_dev->clazz->name, fusd_dev->clazz->owner, fusd_dev->clazz->class_attrs,
-	     fusd_dev->clazz->dev_attrs, fusd_dev->clazz->dev_kobj, fusd_dev->clazz->dev_uevent,
-             fusd_dev->clazz->devnode, fusd_dev->clazz->class_release, fusd_dev->clazz->dev_release,
-             fusd_dev->clazz->suspend, fusd_dev->clazz->resume, fusd_dev->clazz->pm, fusd_dev->clazz->p);
-   fusd_dev->device = CLASS_DEVICE_CREATE(fusd_dev->clazz, NULL, fusd_dev->dev_id, NULL, fusd_dev->dev_name);
    if ( fusd_dev->device == NULL )
    {
       error = PTR_ERR(fusd_dev->device);
@@ -2393,7 +2191,6 @@ STATIC int fusd_register_device (fusd_dev_t *fusd_dev,
 register_failed5:
    class_destroy(fusd_dev->clazz);
    fusd_dev->clazz = NULL;
-register_failed4:
    cdev_del(fusd_dev->handle);
    fusd_dev->handle = NULL;
 register_failed3:
