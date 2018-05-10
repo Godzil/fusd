@@ -90,6 +90,9 @@
 
 #define STATIC
 
+#ifndef GIT_DESCRIBE
+#define GIT_DESCRIBE "unknownversion-dirty"
+#endif
 /* Define this if you want to emit debug messages (adds ~8K) */
 //#define CONFIG_FUSD_DEBUG
 
@@ -284,7 +287,8 @@ DEFINE_SEMAPHORE (fusd_devlist_sem);
 
 //#ifdef MODULE_LICENSE
 MODULE_AUTHOR ("Jeremy Elson <jelson@acm.org> (c)2001");
-MODULE_AUTHOR ("Manoel Trapier <godzil@godzil.net> (c)2009-2012");
+MODULE_AUTHOR ("Manoel Trapier <godzil@godzil.net> (c)2009-2018");
+MODULE_VERSION(GIT_DESCRIBE);
 MODULE_LICENSE ("GPL");
 //#endif
 
