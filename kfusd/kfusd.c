@@ -38,7 +38,7 @@
  * Copyright (c) 2001, Sensoria Corporation
  * Copyright (c) 2002-2003, Regents of the University of California
  * Copyright (c) 2007 Monty and Xiph.Org
- * Copyright (c) 2009-2012 Manoel Trapier <godzil@godzil.net>
+ * Copyright (c) 2009-2018 Manoel Trapier <godzil@godzil.net>
  *
  * $Id: kfusd.c 12354 2007-01-19 17:26:14Z xiphmont $
  */
