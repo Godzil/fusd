@@ -1,0 +1,120 @@
+language: c
+os: linux
+dist: trusty
+compiler: gcc
+
+env:
+  global:
+    - KERNEL_GIT="https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git"
+
+matrix:
+  include:
+    # Older version of the kernel
+    - name: "Kernel 2.6.32"
+      env: KERNEL_BRANCH="v2.6.32" GCC_VER="gcc-4.9"
+      addons:
+        apt:
+          packages:
+            - gcc-4.9
+          sources:
+            - ubuntu-toolchain-r-test
+
+    - name: "Kernel 3.10.0"
+      env: KERNEL_BRANCH="v3.10" GCC_VER="gcc-4.9"
+      addons:
+        apt:
+          packages:
+            - gcc-4.9
+          sources:
+            - ubuntu-toolchain-r-test
+
+    # Here are actively supported kernel
+    - name: "Kernel 3.16.y LTS"
+      env: KERNEL_BRANCH="linux-3.16.y" GCC_VER="gcc-5"
+      addons:
+        apt:
+          packages:
+            - gcc-5
+          sources:
+            - ubuntu-toolchain-r-test
+
+    - name: "Kernel 4.4.y LTS"
+      env: KERNEL_BRANCH="linux-4.4.y" GCC_VER="gcc-5"
+      addons:
+        apt:
+          packages:
+            - gcc-5
+          sources:
+            - ubuntu-toolchain-r-test
+
+    - name: "Kernel 4.9.y LTS"
+      env: KERNEL_BRANCH="linux-4.9.y" GCC_VER="gcc-6"
+      addons:
+        apt:
+          packages:
+            - gcc-6
+          sources:
+            - ubuntu-toolchain-r-test
+
+    - name: "Kernel 4.14.y LTS"
+      env: KERNEL_BRANCH="linux-4.14.y" GCC_VER="gcc-7"
+      addons:
+        apt:
+          packages:
+            - libelf-dev
+            - gcc-7
+          sources:
+            - ubuntu-toolchain-r-test
+
+    - name: "Kernel 4.19.y LTS"
+      env: KERNEL_BRANCH="linux-4.19.y" GCC_VER="gcc-7"
+      addons:
+        apt:
+          packages:
+            - libelf-dev
+            - gcc-7
+          sources:
+            - ubuntu-toolchain-r-test
+
+    # Stable versions
+    - name: "Kernel 5.1.y STABLE"
+      env: KERNEL_BRANCH="linux-5.1.y" GCC_VER="gcc-8"
+      addons:
+        apt:
+          packages:
+            - libelf-dev
+            - gcc-8
+          sources:
+            - ubuntu-toolchain-r-test
+
+    - name: "Kernel 5.2.y STABLE"
+      env: KERNEL_BRANCH="linux-5.2.y" GCC_VER="gcc-8"
+      addons:
+        apt:
+          packages:
+            - libelf-dev
+            - gcc-8
+          sources:
+            - ubuntu-toolchain-r-test
+
+# Here checkout kernels
+before_script:
+  - eval "export CC=${GCC_VER}"
+  - eval "${CC} --version"
+  - git clone ${KERNEL_GIT} --depth=1 --branch=${KERNEL_BRANCH} ${KERNEL_BRANCH}
+  - pushd .
+  - cd $KERNEL_BRANCH
+  - yes "" | make oldconfig CC=${GCC_VER}
+  - make prepare CC=${GCC_VER}
+  - make scripts CC=${GCC_VER}
+  - popd
+
+# Now build with kernel sources
+script:
+  - make KDIR=${PWD}/${KERNEL_BRANCH} CC=${GCC_VER}
+
+# Not sure if I should cache the kernel source tree...
+#cache:
+#  directories:
+#    - '$HOME/.sonar/cache'
+
