@@ -65,6 +65,7 @@
 #include <linux/init.h>
 #include <linux/fs.h>
 #include <linux/mm.h>
+#include <linux/mman.h>
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
 #include <linux/poll.h>
@@ -1663,8 +1664,17 @@ static int fusd_client_mmap(struct file *file, struct vm_area_struct *vma)
 		/* send the message */
 		init_fusd_msg(&fusd_msg);
 		fusd_msg.subcmd = FUSD_MMAP;
-		fusd_msg.parm.fops_msg.offset = vma->vm_pgoff << PAGE_SHIFT;
-		fusd_msg.parm.fops_msg.flags = vma->vm_flags;
+		fusd_msg.parm.fops_msg.mmoffset = vma->vm_pgoff << PAGE_SHIFT;
+
+		fusd_msg.parm.fops_msg.mmprot = ((vma->vm_flags & VM_READ) ? PROT_READ : 0) |
+			                        ((vma->vm_flags & VM_WRITE) ? PROT_WRITE : 0) |
+			                        ((vma->vm_flags & VM_EXEC) ? PROT_EXEC : 0);
+		fusd_msg.parm.fops_msg.mmflags = ((vma->vm_flags & VM_SHARED) ? MAP_SHARED : 0 ) |
+					       ((vma->vm_flags & VM_GROWSDOWN) ? MAP_GROWSDOWN : 0) |
+					       ((vma->vm_flags & VM_DENYWRITE) ? MAP_DENYWRITE : 0) |
+					       ((vma->vm_flags & VM_EXEC) ? MAP_EXECUTABLE : 0) |
+					       ((vma->vm_flags & VM_LOCKED) ? MAP_LOCKED : 0);
+
 		fusd_msg.parm.fops_msg.length = vma->vm_end - vma->vm_start;
 
 		/* send message to userspace */

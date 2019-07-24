@@ -110,6 +110,11 @@ typedef struct {
   unsigned long offset;
   unsigned int cmd;  /* ioctl cmd, poll_diff cached_state */
 
+  /* mmap parameters */
+  unsigned long mmprot;
+  unsigned long mmflags;
+  unsigned long mmoffset;
+
   union {
     unsigned long arg; /* ioctl */
     void *ptr_arg;
