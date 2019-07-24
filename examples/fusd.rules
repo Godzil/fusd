@@ -1,0 +1,2 @@
+SUBSYSTEM=="fusd",                      NAME="fusd/%k"
+
