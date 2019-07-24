@@ -38,7 +38,7 @@
  * Copyright (c) 2001, Sensoria Corporation
  * Copyright (c) 2002-2003, Regents of the University of California
  * Copyright (c) 2007 Monty and Xiph.Org
- * Copyright (c) 2009-2018 Manoel Trapier <godzil@godzil.net>
+ * Copyright (c) 2009-2019 Manoel Trapier <godzil@godzil.net>
  *
  */
 
@@ -204,7 +204,7 @@ DEFINE_SEMAPHORE (fusd_devlist_sem);
 
 //#ifdef MODULE_LICENSE
 MODULE_AUTHOR ("Jeremy Elson <jelson@acm.org> (c)2001");
-MODULE_AUTHOR ("Manoel Trapier <godzil@godzil.net> (c)2009-2018");
+MODULE_AUTHOR ("Manoel Trapier <godzil@godzil.net> (c)2009-2019");
 MODULE_VERSION(GIT_DESCRIBE);
 MODULE_LICENSE ("GPL");
 //#endif
