@@ -98,7 +98,7 @@ typedef struct {
   pid_t pid;
   uid_t uid;
   gid_t gid;
-  unsigned int flags;		/* flags from file struct */
+  unsigned long flags;		/* flags from file struct */
   void *device_info;		/* device info */
   void *private_info;		/* file info */
 
@@ -106,8 +106,8 @@ typedef struct {
    * union but it just makes things too complex and doesn't save all
    * that much memory anyway */
   ssize_t retval;
-  size_t length;
-  loff_t offset;
+  unsigned long length;
+  unsigned long offset;
   unsigned int cmd;  /* ioctl cmd, poll_diff cached_state */
 
   union {

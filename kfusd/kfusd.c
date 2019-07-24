@@ -1620,7 +1620,7 @@ struct fusd_mmap_instance {
     fusd_dev_t *fusd_dev;
     fusd_file_t *fusd_file;
     unsigned long addr;
-    int size;
+    unsigned long size;
     atomic_t refcount;
 };
 
