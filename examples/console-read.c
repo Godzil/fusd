@@ -40,7 +40,6 @@
  * need a template from which to start on a real driver, use pager.c
  * instead.
  *
- * $Id: console-read.c 12351 2007-01-19 07:22:54Z xiphmont $
  */
 
 #include <stdio.h>

@@ -71,7 +71,6 @@
  * but want to use it on a system that does not have FUSD, check out
  * emlog at http://www.circlemud.org/~jelson/software/emlog.
  *
- * $Id: logring.c 12351 2007-01-19 07:22:54Z xiphmont $
  */
 
 #include <stdio.h>

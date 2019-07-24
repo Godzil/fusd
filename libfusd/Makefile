@@ -1,6 +1,7 @@
 SRC  = libfusd.c
 OBJ  = libfusd.o
 TARGETS = libfusd.a libfusd.so.0.0
+GIT_DESCRIBE = $(shell git describe --dirty --tags)
 
 default: $(TARGETS)
 
@@ -15,7 +16,7 @@ clean:
 	rm -f *.o *.so *.so.* *.a *.d *.d.* gmon.out *~ 
 
 $(TARGETS): 
-	$(MAKE) target CFLAGS='-g -O2 $(SCF) $(GCF)'
+	$(MAKE) target CFLAGS='-g -O2 $(SCF) $(GCF) -DGIT_DESCRIBE=\"${GIT_DESCRIBE}\"'
 
 target: $(OBJ) 
 	$(LD) $(OBJ) $(SOLDFLAGS) -o libfusd.so.0.0 $(SLF)

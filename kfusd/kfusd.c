@@ -40,7 +40,6 @@
  * Copyright (c) 2007 Monty and Xiph.Org
  * Copyright (c) 2009-2018 Manoel Trapier <godzil@godzil.net>
  *
- * $Id: kfusd.c 12354 2007-01-19 17:26:14Z xiphmont $
  */
 
 /*
@@ -2827,7 +2826,8 @@ STATIC void fusd_status_build_text(fusd_statcontext_t *fs)
 	}
 
 	len += snprintf(buf + len, buf_size - len,
-	                "\nFUSD $Id:$ - %d devices used by %d clients\n",
+	                "\nFUSD %s - %d devices used by %d clients\n",
+	                GIT_DESCRIBE,
 	                total_files, total_clients);
 
 out:

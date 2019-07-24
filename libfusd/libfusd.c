@@ -35,10 +35,9 @@
  *
  * authors: jelson and girod
  *
- * $Id: libfusd.c 12351 2007-01-19 07:22:54Z xiphmont $
  */
 
-char libfusd_c_id[] = "$Id: libfusd.c 12351 2007-01-19 07:22:54Z xiphmont $";
+char libfusd_c_id[] = "libfusd.c - FUSD " GIT_DESCRIBE;
 
 #include <stdio.h>
 #include <stdlib.h>

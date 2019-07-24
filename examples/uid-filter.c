@@ -42,7 +42,6 @@
  * not be read by anyone other than the driver owner (not even root!).
  * When you read from the device, it returns your PID to you.
  *
- * $Id: uid-filter.c 12351 2007-01-19 07:22:54Z xiphmont $
  */
 
 #include <stdio.h>

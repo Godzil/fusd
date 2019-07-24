@@ -37,7 +37,6 @@
  *
  * Private header file used by the Linux Kernel Module
  *
- * $Id: kfusd.h 12351 2007-01-19 07:22:54Z xiphmont $
  */
 
 #ifndef __KFUSD_H__
