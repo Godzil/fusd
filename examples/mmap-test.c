@@ -47,7 +47,7 @@
 
 #define MIN(x, y) ((x) < (y) ? (x) : (y))
 
-#define BUFFER_SIZE 1024
+#define BUFFER_SIZE 4096
 
 static char *mmap_buffer;
 
