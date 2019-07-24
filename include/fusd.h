@@ -81,7 +81,7 @@ struct fusd_file_operations {
   int (*ioctl) (struct fusd_file_info *file, int request, void *data);
   int (*poll_diff) (struct fusd_file_info *file, unsigned int cached_state);
   int (*unblock) (struct fusd_file_info *file);
-  int (*mmap) (struct fusd_file_info *file, int offset, size_t length, int flags, void** addr, size_t* out_length);
+  int (*mmap) (struct fusd_file_info *file, int offset, size_t length, int prot, int flags, void** addr, size_t* out_length);
 } fusd_file_operations_t;
 
 

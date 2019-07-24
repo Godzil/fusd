@@ -503,8 +503,8 @@ static int fusd_dispatch_one(int fd, fusd_file_operations_t *fops)
     //printf("FUSD_MMAP\n");
     if (fops && fops->mmap)
     {
-      user_retval = fops->mmap(file, msg->parm.fops_msg.offset, msg->parm.fops_msg.length, msg->parm.fops_msg.flags,
-                               &msg->parm.fops_msg.arg.ptr_arg, &msg->parm.fops_msg.length);
+      user_retval = fops->mmap(file, msg->parm.fops_msg.mmoffset, msg->parm.fops_msg.length, msg->parm.fops_msg.mmprot,
+                               msg->parm.fops_msg.mmflags, &msg->parm.fops_msg.arg.ptr_arg, &msg->parm.fops_msg.length);
     }
     break;
 
