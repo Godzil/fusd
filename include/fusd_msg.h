@@ -81,6 +81,8 @@
 /* other constants */
 #define FUSD_MSG_MAGIC      0x7a6b93cd
 
+#pragma pack(1)
+
 /* user->kernel: register a device */
 typedef struct {
   char name[FUSD_MAX_NAME_LENGTH+1];
@@ -147,5 +149,7 @@ typedef struct {
   pid_t pid;
   int num_open;
 } fusd_status_t;
+
+#pragma pack()
 
 #endif /* __FUSD_MSG_H__ */
