@@ -1736,8 +1736,11 @@ static int fusd_client_fault(struct vm_area_struct *vma, struct vm_fault *vmf, i
 #endif
 
 	// todo: worry about size
-	if (offset > mmap_instance->size)
+	if (offset > mmap_instance->size) {
+		RDEBUG(2,
+		       "Current offset bigger than block size: cannot accept");
 		goto out;
+	}
 
 	down_read(&mmap_instance->fusd_dev->task->mm->mmap_sem);
 	result = GET_USER_PAGES(mmap_instance->fusd_dev->task, mmap_instance->fusd_dev->task->mm,
@@ -1745,9 +1748,9 @@ static int fusd_client_fault(struct vm_area_struct *vma, struct vm_fault *vmf, i
 	up_read(&mmap_instance->fusd_dev->task->mm->mmap_sem);
 
 
-	if (PageAnon(vmf->page)) {
-		RDEBUG(2,
-		       "Cannot mmap anonymous pages. Be sure to allocate your shared buffer with MAP_SHARED | MAP_ANONYMOUS");
+	if (PageAnon(page)) {
+		RDEBUG(2, "Cannot mmap non anonymous pages: The server is sharing a private page.\n"
+	                  "Be sure to allocate your shared buffer with mmap and  MAP_SHARED | MAP_ANONYMOUS as flags.");
 		return VM_FAULT_SIGBUS;
 	}
 
