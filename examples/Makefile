@@ -1,22 +1,26 @@
 SRC  = console-read.c drums3.c echo.c helloworld.c logring.c pager.c\
 	drums2.c drums.c ioctl.c uid-filter.c
 OBJ  = console-read.o drums3.o echo.o helloworld.o logring.o pager.o\
-	drums2.o drums.o ioctl.o uid-filter.o
+	drums2.o drums.o ioctl.o uid-filter.o mmap-test.o
 TARGETS = console-read drums3 echo helloworld logring pager\
-	drums2 drums ioctl uid-filter
+	drums2 drums ioctl uid-filter mmap-test
 
-default: $(TARGETS)
+default: $(TARGETS) mmap-read
 
 install: $(TARGETS)
 
 clean:
 	rm -f *.o *.d $(TARGETS) gmon.out *~ 
 
-$(TARGETS): %: %.c
-	$(CC) $(GCF) $< -o $@ ../libfusd/libfusd.a 
+mmap-read: mmap-read.c
+	$(CC) $< -o $@
+
+$(TARGETS): %: %.c ../libfusd/libfusd.a
+	$(CC) $(GCF) $< -o $@ ../libfusd/libfusd.a
 
 %.d: %.c
 	$(CC) -M $(CFLAGS) $< > $@.$$$$; sed 's,\($*\)\.o[ :]*,\1.o $@ : ,g' < $@.$$$$ > $@; rm -f $@.$$$$
+
 
 ifeq ($(MAKECMDGOALS),target)
 include $(SRC:.c=.d)
