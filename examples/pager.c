@@ -366,12 +366,12 @@ static int fusd_success(struct fusd_file_info *file)
 int main(int argc, char *argv[])
 {
   /* register the input device */
-  fusd_simple_register("/dev/pager/input", "pager", "input", 0666, NULL,
+  fusd_simple_register("/dev/pager/input", "pager", "pager!input", 0666, NULL,
                        open: fusd_success, close: fusd_success,
                        write: pager_input_write);
 
   /* register the notification device */
-  fusd_simple_register("/dev/pager/notify", "pager", "notify", 0666, NULL,
+  fusd_simple_register("/dev/pager/notify", "pager", "pager!notify", 0666, NULL,
                        open: pager_notify_open,
 		       close: pager_notify_close,
                        read: pager_notify_read,
