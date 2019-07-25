@@ -65,6 +65,7 @@
 #include <linux/init.h>
 #include <linux/fs.h>
 #include <linux/mm.h>
+#include <linux/aio.h>
 #include <linux/mman.h>
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
