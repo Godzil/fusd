@@ -2418,7 +2418,7 @@ static ssize_t fusd_writev(struct file *file,
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0)
 ssize_t fusd_write_iter (struct kiocb *iocb, struct iov_iter *iov)
 {
-   unsigned long count = iov_iter_count(iov);
+   // unsigned long count = iov_iter_count(iov);
    char *msg, *data;
    size_t msg_len, data_len;
 
