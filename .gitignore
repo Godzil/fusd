@@ -21,3 +21,5 @@ examples/ioctl
 examples/logring
 examples/pager
 examples/uid-filter
+examples/mmap-read
+examples/mmap-test
