@@ -2,6 +2,8 @@
 FUSD: A Linux Framework for User-Space Devices
 ----------------------------------------------
 
+[![Build Status](https://travis-ci.org/Godzil/fusd.svg?branch=master)](https://travis-ci.org/Godzil/fusd)
+
 **Welcome to FUSD!**
 
 This is FUSD snapshot 20110401, released 18 January 2012. This fork is based
