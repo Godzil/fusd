@@ -150,30 +150,6 @@ struct fusd_dev_t_s {
   /* pointer to allow a dev to be placed on a dev_list */
   struct list_head devlist;
 };
-  
-
-/**** Function Prototypes ****/
-
-STATIC int maybe_free_fusd_dev(fusd_dev_t *fusd_dev);
-
-STATIC int find_fusd_file(fusd_dev_t *fusd_dev, fusd_file_t *fusd_file);
-STATIC int free_fusd_file(fusd_dev_t *fusd_dev, fusd_file_t *fusd_file);
-
-STATIC int fusd_fops_call_send(fusd_file_t *fusd_file_arg,
-			       fusd_msg_t *fusd_msg, struct fusd_transaction** transaction);
-STATIC int fusd_fops_call_wait(fusd_file_t *fusd_file_arg,
-			       fusd_msg_t **fusd_msg_reply, struct fusd_transaction* transaction);
-STATIC void fusd_fops_call_done(fusd_file_t *fusd_file);
-
-STATIC void fusd_forge_close(fusd_msg_t *msg, fusd_dev_t *fusd_dev);
-
-STATIC int fusd_add_transaction(fusd_file_t *fusd_file, int transid, int subcmd, int size, struct fusd_transaction** out_transaction);
-STATIC void fusd_cleanup_transaction(fusd_file_t *fusd_file, struct fusd_transaction* transaction);
-STATIC void fusd_remove_transaction(fusd_file_t *fusd_file, struct fusd_transaction* transaction);
-STATIC struct fusd_transaction* fusd_find_transaction(fusd_file_t *fusd_file, int transid);
-STATIC struct fusd_transaction* fusd_find_transaction_by_pid(fusd_file_t *fusd_file, int pid);
-
-
 
 /**** Utility functions & macros ****/
 

@@ -86,8 +86,6 @@
 #include <asm/pgtable.h>
 #include <asm/pgalloc.h>
 
-#define STATIC
-
 #ifndef GIT_DESCRIBE
 #define GIT_DESCRIBE "unknownversion-dirty"
 #endif
@@ -169,11 +167,11 @@
 #error "***FUSD doesn't work before Linux Kernel v2.6.13"
 #endif
 
-STATIC struct cdev *fusd_control_cdev;
-STATIC struct cdev *fusd_status_cdev;
+static struct cdev *fusd_control_cdev;
+static struct cdev *fusd_status_cdev;
 
-STATIC dev_t control_id;
-STATIC dev_t status_id;
+static dev_t control_id;
+static dev_t status_id;
 
 static struct CLASS *fusd_class;
 
@@ -186,13 +184,13 @@ static struct device *fusd_status_device;
 #endif
 
 /* version number incremented for each registered device */
-STATIC int last_version = 1;
+static int last_version = 1;
 
 /* version number incremented for each transaction to userspace */
-STATIC int last_transid = 1;
+static int last_transid = 1;
 
 /* wait queue that is awakened when new devices are registered */
-STATIC DECLARE_WAIT_QUEUE_HEAD (new_device_wait);
+static DECLARE_WAIT_QUEUE_HEAD (new_device_wait);
 
 /* the list of valid devices, and sem to protect it */
 LIST_HEAD (fusd_devlist_head);
@@ -210,11 +208,31 @@ MODULE_VERSION(GIT_DESCRIBE);
 MODULE_LICENSE ("GPL");
 //#endif
 
+/**** Function Prototypes ****/
+static int maybe_free_fusd_dev(fusd_dev_t *fusd_dev);
+
+static int find_fusd_file(fusd_dev_t *fusd_dev, fusd_file_t *fusd_file);
+static int free_fusd_file(fusd_dev_t *fusd_dev, fusd_file_t *fusd_file);
+
+static int fusd_fops_call_send(fusd_file_t *fusd_file_arg,
+                               fusd_msg_t *fusd_msg, struct fusd_transaction** transaction);
+static int fusd_fops_call_wait(fusd_file_t *fusd_file_arg,
+                               fusd_msg_t **fusd_msg_reply, struct fusd_transaction* transaction);
+
+static void fusd_forge_close(fusd_msg_t *msg, fusd_dev_t *fusd_dev);
+
+static int fusd_add_transaction(fusd_file_t *fusd_file, int transid, int subcmd, int size, struct fusd_transaction** out_transaction);
+static void fusd_cleanup_transaction(fusd_file_t *fusd_file, struct fusd_transaction* transaction);
+static void fusd_remove_transaction(fusd_file_t *fusd_file, struct fusd_transaction* transaction);
+static struct fusd_transaction* fusd_find_transaction(fusd_file_t *fusd_file, int transid);
+static struct fusd_transaction* fusd_find_transaction_by_pid(fusd_file_t *fusd_file, int pid);
+
+
 /***************************Debugging Support*****************************/
 
 #ifdef CONFIG_FUSD_DEBUG
 
-STATIC int fusd_debug_level = CONFIG_FUSD_DEBUGLEVEL;
+static int fusd_debug_level = CONFIG_FUSD_DEBUGLEVEL;
 module_param (fusd_debug_level, int, S_IRUGO);
 
 #   define BUFSIZE 1000 /* kernel's kmalloc pool has a 1012-sized bucket */
@@ -223,7 +241,7 @@ static int debug_throttle = 0; /* emit a maximum number of debug
 				  out the machine accidentally if a
 				  daemon disappears with open files */
 
-STATIC void rdebug_real(char *fmt, ...)
+static void rdebug_real(char *fmt, ...)
 {
 	va_list ap;
 	int len;
@@ -276,7 +294,7 @@ typedef struct
 
 mem_debug_t *mem_debug;
 
-STATIC int fusd_mem_init (void)
+static int fusd_mem_init (void)
 {
    int i;
 
@@ -296,7 +314,7 @@ STATIC int fusd_mem_init (void)
    return 0;
 }
 
-STATIC void fusd_mem_cleanup (void)
+static void fusd_mem_cleanup (void)
 {
    int i;
    int count = 0;
@@ -312,7 +330,7 @@ STATIC void fusd_mem_cleanup (void)
    kfree(mem_debug);
 }
 
-STATIC void fusd_mem_add (void *ptr, int line, int size)
+static void fusd_mem_add (void *ptr, int line, int size)
 {
    int i;
 
@@ -332,7 +350,7 @@ STATIC void fusd_mem_add (void *ptr, int line, int size)
    RDEBUG(1, "WARNING - memdebug out of space!!!!");
 }
 
-STATIC void fusd_mem_del (void *ptr)
+static void fusd_mem_del (void *ptr)
 {
    int i;
    for ( i = 0; i < MAX_MEM_DEBUG; i++ )
@@ -346,7 +364,7 @@ STATIC void fusd_mem_del (void *ptr)
    RDEBUG(2, "WARNING - memdebug is confused!!!!");
 }
 
-STATIC void *fusd_kmalloc (size_t size, int type, int line)
+static void *fusd_kmalloc (size_t size, int type, int line)
 {
    void *ptr = kmalloc(size, type);
    down(&fusd_memdebug_sem);
@@ -355,7 +373,7 @@ STATIC void *fusd_kmalloc (size_t size, int type, int line)
    return ptr;
 }
 
-STATIC void fusd_kfree (void *ptr)
+static void fusd_kfree (void *ptr)
 {
    down(&fusd_memdebug_sem);
    fusd_mem_del(ptr);
@@ -363,7 +381,7 @@ STATIC void fusd_kfree (void *ptr)
    up(&fusd_memdebug_sem);
 }
 
-STATIC void *fusd_vmalloc (size_t size, int line)
+static void *fusd_vmalloc (size_t size, int line)
 {
    void *ptr = vmalloc(size);
    down(&fusd_memdebug_sem);
@@ -372,7 +390,7 @@ STATIC void *fusd_vmalloc (size_t size, int line)
    return ptr;
 }
 
-STATIC void fusd_vfree (void *ptr)
+static void fusd_vfree (void *ptr)
 {
    down(&fusd_memdebug_sem);
    fusd_mem_del(ptr);
@@ -391,7 +409,7 @@ STATIC void fusd_vfree (void *ptr)
 /************** STATE MANAGEMENT AND BOOKKEEPING UTILITIES ***************/
 /*************************************************************************/
 
-STATIC inline void init_fusd_msg(fusd_msg_t *fusd_msg)
+static inline void init_fusd_msg(fusd_msg_t *fusd_msg)
 {
 	if (fusd_msg == NULL)
 		return;
@@ -404,7 +422,7 @@ STATIC inline void init_fusd_msg(fusd_msg_t *fusd_msg)
 /*
  * free a fusd_msg, and NULL out the pointer that points to that fusd_msg.
  */
-STATIC inline void free_fusd_msg(fusd_msg_t **fusd_msg)
+static inline void free_fusd_msg(fusd_msg_t **fusd_msg)
 {
 	if (fusd_msg == NULL || *fusd_msg == NULL)
 		return;
@@ -425,7 +443,7 @@ STATIC inline void free_fusd_msg(fusd_msg_t **fusd_msg)
  * num_files<array_size/4, the size is halved.  Array is kept as is if
  * the malloc fails.  Returns a pointer to the new file struct or NULL
  * if there isn't one. */
-STATIC fusd_file_t **fusd_dev_adjsize(fusd_dev_t *fusd_dev)
+static fusd_file_t **fusd_dev_adjsize(fusd_dev_t *fusd_dev)
 {
 	fusd_file_t **old_array;
 	int old_size;
@@ -489,7 +507,7 @@ STATIC fusd_file_t **fusd_dev_adjsize(fusd_dev_t *fusd_dev)
  *
  * Returns:  1 if the device was freed
  *           0 if the device still exists (and can be unlocked) */
-STATIC int maybe_free_fusd_dev(fusd_dev_t *fusd_dev)
+static int maybe_free_fusd_dev(fusd_dev_t *fusd_dev)
 {
 	fusd_msgC_t *ptr, *next;
 
@@ -563,7 +581,7 @@ STATIC int maybe_free_fusd_dev(fusd_dev_t *fusd_dev)
  * device state itself is freed.
  *
  */
-STATIC void zombify_dev(fusd_dev_t *fusd_dev)
+static void zombify_dev(fusd_dev_t *fusd_dev)
 {
 	int i;
 
@@ -588,7 +606,7 @@ STATIC void zombify_dev(fusd_dev_t *fusd_dev)
  * returns index if found, -1 if not found.  ASSUMES WE HAVE A VALID
  * fusd_dev.  fusd_file may be NULL if we are searching for an empty
  * slot. */
-STATIC int find_fusd_file(fusd_dev_t *fusd_dev, fusd_file_t *fusd_file)
+static int find_fusd_file(fusd_dev_t *fusd_dev, fusd_file_t *fusd_file)
 {
 	int i, num_files = fusd_dev->num_files;
 	fusd_file_t **files = fusd_dev->files;
@@ -607,7 +625,7 @@ STATIC int find_fusd_file(fusd_dev_t *fusd_dev, fusd_file_t *fusd_file)
  * freed.  If the device is freed, then do not try to unlock it!
  * (Callers: Check the return value before unlocking!)
  */
-STATIC int free_fusd_file(fusd_dev_t *fusd_dev, fusd_file_t *fusd_file)
+static int free_fusd_file(fusd_dev_t *fusd_dev, fusd_file_t *fusd_file)
 {
 	int i;
 	struct list_head *tmp, *it;
@@ -673,7 +691,7 @@ STATIC int free_fusd_file(fusd_dev_t *fusd_dev, fusd_file_t *fusd_file)
  * call on that file descriptor -- well, we lose.  Clear state of that
  * old syscall out and continue as usual.
  */
-STATIC struct fusd_transaction *fusd_find_incomplete_transaction(fusd_file_t *fusd_file, int subcmd)
+static struct fusd_transaction *fusd_find_incomplete_transaction(fusd_file_t *fusd_file, int subcmd)
 {
 	struct fusd_transaction *transaction = fusd_find_transaction_by_pid(fusd_file, current->pid);
 	if (transaction == NULL)
@@ -692,7 +710,7 @@ STATIC struct fusd_transaction *fusd_find_incomplete_transaction(fusd_file_t *fu
 	return transaction;
 }
 
-STATIC int send_to_dev(fusd_dev_t *fusd_dev, fusd_msg_t *fusd_msg, int locked)
+static int send_to_dev(fusd_dev_t *fusd_dev, fusd_msg_t *fusd_msg, int locked)
 {
 	fusd_msgC_t *fusd_msgC;
 
@@ -735,7 +753,7 @@ zombie_dev:
  * free_fusd_file, when we throw away a reply that had been
  * pending for a restart.
  */
-STATIC void fusd_forge_close(fusd_msg_t *msg, fusd_dev_t *fusd_dev)
+static void fusd_forge_close(fusd_msg_t *msg, fusd_dev_t *fusd_dev)
 {
 	RDEBUG(2, "/dev/%s tried to complete an open for transid %ld, "
 	          "forging a close", NAME(fusd_dev), msg->parm.fops_msg.transid);
@@ -751,7 +769,7 @@ STATIC void fusd_forge_close(fusd_msg_t *msg, fusd_dev_t *fusd_dev)
  * NOTE - we are already holding the lock on fusd_file_arg when this
  * function is called, but NOT the lock on the fusd_dev
  */
-STATIC int fusd_fops_call_send(fusd_file_t *fusd_file_arg,
+static int fusd_fops_call_send(fusd_file_t *fusd_file_arg,
                                fusd_msg_t *fusd_msg, struct fusd_transaction **transaction)
 {
 	fusd_dev_t *fusd_dev;
@@ -825,7 +843,7 @@ invalid_file:
  * NOTE - we are already holding the lock on fusd_file_arg when this
  * function is called, but NOT the lock on the fusd_dev
  */
-STATIC int fusd_fops_call_wait(fusd_file_t *fusd_file_arg,
+static int fusd_fops_call_wait(fusd_file_t *fusd_file_arg,
                                fusd_msg_t **fusd_msg_reply, struct fusd_transaction *transaction)
 {
 	fusd_dev_t *fusd_dev;
@@ -933,7 +951,7 @@ zombie_dev:
 
 /* fusd client system call handlers should call this after they call
  * fops_call, to destroy the message that was returned to them. */
-STATIC void fusd_transaction_done(struct fusd_transaction *transaction)
+static void fusd_transaction_done(struct fusd_transaction *transaction)
 {
 	transaction->transid = -1;
 	transaction->pid = 0;
@@ -1082,7 +1100,7 @@ int fusd_dev_add_file(struct file *file, fusd_dev_t *fusd_dev, fusd_file_t **fus
 	return 0;
 }
 
-STATIC struct fusd_dev_t_s *find_user_device(int dev_id)
+static struct fusd_dev_t_s *find_user_device(int dev_id)
 {
 	struct list_head *entry;
 	down(&fusd_devlist_sem);
@@ -1103,7 +1121,7 @@ STATIC struct fusd_dev_t_s *find_user_device(int dev_id)
  * A client has called open() has been called on a registered device.
  * See comment higher up for detailed notes on this function.
  */
-STATIC int fusd_client_open(struct inode *inode, struct file *file)
+static int fusd_client_open(struct inode *inode, struct file *file)
 {
 	int retval;
 	int device_freed = 0;
@@ -1188,7 +1206,7 @@ STATIC int fusd_client_open(struct inode *inode, struct file *file)
 
 /* close() has been called on a registered device.  like
  * fusd_client_open, we must lock the entire device. */
-STATIC int fusd_client_release(struct inode *inode, struct file *file)
+static int fusd_client_release(struct inode *inode, struct file *file)
 {
 	int retval;
 	fusd_file_t *fusd_file;
@@ -1229,7 +1247,7 @@ invalid_file:
 	return -EPIPE;
 }
 
-STATIC ssize_t fusd_client_read(struct file *file, char *buf,
+static ssize_t fusd_client_read(struct file *file, char *buf,
                                 size_t count, loff_t *offset)
 {
 	fusd_dev_t *fusd_dev;
@@ -1326,7 +1344,7 @@ zombie_dev:
 	return -EPIPE;
 }
 
-STATIC int fusd_add_transaction(fusd_file_t *fusd_file, int transid, int subcmd, int size,
+static int fusd_add_transaction(fusd_file_t *fusd_file, int transid, int subcmd, int size,
                                 struct fusd_transaction **out_transaction)
 {
 	struct fusd_transaction *transaction = (struct fusd_transaction *) KMALLOC(sizeof(struct fusd_transaction),
@@ -1350,13 +1368,13 @@ STATIC int fusd_add_transaction(fusd_file_t *fusd_file, int transid, int subcmd,
 	return 0;
 }
 
-STATIC void fusd_cleanup_transaction(fusd_file_t *fusd_file, struct fusd_transaction *transaction)
+static void fusd_cleanup_transaction(fusd_file_t *fusd_file, struct fusd_transaction *transaction)
 {
 	free_fusd_msg(&transaction->msg_in);
 	fusd_remove_transaction(fusd_file, transaction);
 }
 
-STATIC void fusd_remove_transaction(fusd_file_t *fusd_file, struct fusd_transaction *transaction)
+static void fusd_remove_transaction(fusd_file_t *fusd_file, struct fusd_transaction *transaction)
 {
 	down(&fusd_file->transactions_sem);
 	list_del(&transaction->list);
@@ -1365,7 +1383,7 @@ STATIC void fusd_remove_transaction(fusd_file_t *fusd_file, struct fusd_transact
 	KFREE(transaction);
 }
 
-STATIC struct fusd_transaction *fusd_find_transaction(fusd_file_t *fusd_file, int transid)
+static struct fusd_transaction *fusd_find_transaction(fusd_file_t *fusd_file, int transid)
 {
 	struct list_head *i;
 	down(&fusd_file->transactions_sem);
@@ -1383,7 +1401,7 @@ STATIC struct fusd_transaction *fusd_find_transaction(fusd_file_t *fusd_file, in
 	return NULL;
 }
 
-STATIC struct fusd_transaction *fusd_find_transaction_by_pid(fusd_file_t *fusd_file, int pid)
+static struct fusd_transaction *fusd_find_transaction_by_pid(fusd_file_t *fusd_file, int pid)
 {
 	struct list_head *i;
 	down(&fusd_file->transactions_sem);
@@ -1401,7 +1419,7 @@ STATIC struct fusd_transaction *fusd_find_transaction_by_pid(fusd_file_t *fusd_f
 	return NULL;
 }
 
-STATIC ssize_t fusd_client_write(struct file *file,
+static ssize_t fusd_client_write(struct file *file,
                                  const char *buffer,
                                  size_t length,
                                  loff_t *offset)
@@ -1499,10 +1517,10 @@ zombie_dev:
 }
 
 #ifndef HAVE_UNLOCKED_IOCTL
-STATIC int fusd_client_ioctl(struct inode *inode, struct file *file,
+static int fusd_client_ioctl(struct inode *inode, struct file *file,
                              unsigned int cmd, unsigned long arg)
 #else
-STATIC long fusd_client_unlocked_ioctl (struct file *file,
+static long fusd_client_unlocked_ioctl (struct file *file,
 			      unsigned int cmd, unsigned long arg)
 #endif
 {
@@ -1795,7 +1813,7 @@ out:
  * cached from the driver.
  * 
  */
-STATIC unsigned int fusd_client_poll(struct file *file, poll_table *wait)
+static unsigned int fusd_client_poll(struct file *file, poll_table *wait)
 {
 	fusd_dev_t *fusd_dev;
 	fusd_file_t *fusd_file;
@@ -1872,7 +1890,7 @@ invalid_file:
 }
 
 #ifndef HAVE_UNLOCKED_IOCTL
-STATIC struct file_operations fusd_client_fops = {
+static struct file_operations fusd_client_fops = {
 	.owner = THIS_MODULE,
 	.open =  fusd_client_open,
 	.release = fusd_client_release,
@@ -1883,7 +1901,7 @@ STATIC struct file_operations fusd_client_fops = {
 	.mmap = fusd_client_mmap
 };
 #else
-STATIC struct file_operations fusd_client_fops = {
+static struct file_operations fusd_client_fops = {
 						  .owner = THIS_MODULE,
 						  .open =  fusd_client_open,
 						  .release = fusd_client_release,
@@ -1900,7 +1918,7 @@ STATIC struct file_operations fusd_client_fops = {
 /*************************************************************************/
 
 
-STATIC fusd_file_t *find_fusd_reply_file(fusd_dev_t *fusd_dev, fusd_msg_t *msg)
+static fusd_file_t *find_fusd_reply_file(fusd_dev_t *fusd_dev, fusd_msg_t *msg)
 {
 	/* first, try the hint */
 	int i = msg->parm.fops_msg.hint;
@@ -1925,7 +1943,7 @@ STATIC fusd_file_t *find_fusd_reply_file(fusd_dev_t *fusd_dev, fusd_msg_t *msg)
 /* Process an incoming reply to a message dispatched by
  * fusd_fops_call.  Called by fusd_write when a driver writes to
  * /dev/fusd. */
-STATIC int fusd_fops_reply(fusd_dev_t *fusd_dev, fusd_msg_t *msg)
+static int fusd_fops_reply(fusd_dev_t *fusd_dev, fusd_msg_t *msg)
 {
 	fusd_file_t *fusd_file;
 	struct fusd_transaction *transaction;
@@ -1974,7 +1992,7 @@ discard:
 }
 
 /* special function to process responses to POLL_DIFF */
-STATIC int fusd_polldiff_reply(fusd_dev_t *fusd_dev, fusd_msg_t *msg)
+static int fusd_polldiff_reply(fusd_dev_t *fusd_dev, fusd_msg_t *msg)
 {
 	fusd_file_t *fusd_file;
 
@@ -2001,13 +2019,7 @@ STATIC int fusd_polldiff_reply(fusd_dev_t *fusd_dev, fusd_msg_t *msg)
 	return 0;
 }
 
-STATIC int systest(struct super_block *sb, void *data)
-{
-	return 1;
-
-}
-
-STATIC int fusd_register_device(fusd_dev_t *fusd_dev,
+static int fusd_register_device(fusd_dev_t *fusd_dev,
                                 register_msg_t register_msg)
 {
 	int error = 0;
@@ -2134,7 +2146,7 @@ register_failed:
 /****************************************************************************/
 
 /* open() called on /dev/fusd itself */
-STATIC int fusd_open(struct inode *inode, struct file *file)
+static int fusd_open(struct inode *inode, struct file *file)
 {
 	fusd_dev_t *fusd_dev = NULL;
 	fusd_file_t **file_array = NULL;
@@ -2179,7 +2191,7 @@ dev_malloc_failed:
 
 /* close() called on /dev/fusd itself.  destroy the device that
  * was registered by it, if any. */
-STATIC int fusd_release(struct inode *inode, struct file *file)
+static int fusd_release(struct inode *inode, struct file *file)
 {
 	fusd_dev_t *fusd_dev;
 
@@ -2238,7 +2250,7 @@ invalid_dev:
  * This function processes messages coming from userspace device drivers
  * (i.e., writes to the /dev/fusd control channel.)
  */
-STATIC ssize_t fusd_process_write(struct file *file,
+static ssize_t fusd_process_write(struct file *file,
                                   const char *user_msg_buffer, size_t user_msg_len,
                                   const char *user_data_buffer, size_t user_data_len)
 {
@@ -2386,7 +2398,7 @@ invalid_dev:
 	return -EPIPE;
 }
 
-STATIC ssize_t fusd_write(struct file *file,
+static ssize_t fusd_write(struct file *file,
                           const char *buffer,
                           size_t length,
                           loff_t *offset)
@@ -2396,7 +2408,7 @@ STATIC ssize_t fusd_write(struct file *file,
 }
 
 #ifndef HAVE_UNLOCKED_IOCTL
-STATIC ssize_t fusd_writev(struct file *file,
+static ssize_t fusd_writev(struct file *file,
                            const struct iovec *iov,
                            unsigned long count,
                            loff_t *offset)
@@ -2437,7 +2449,7 @@ ssize_t fusd_write_iter (struct kiocb *iocb, struct iov_iter *iov)
 			     data, data_len);
 }
 #else
-STATIC ssize_t fusd_aio_write (struct kiocb *iocb,
+static ssize_t fusd_aio_write (struct kiocb *iocb,
 			       const struct iovec *iov,
 			       unsigned long count,
 			       loff_t offset)
@@ -2455,10 +2467,10 @@ STATIC ssize_t fusd_aio_write (struct kiocb *iocb,
 #endif
 
 #ifndef HAVE_UNLOCKED_IOCTL
-STATIC int fusd_ioctl(struct inode *inode, struct file *file,
+static int fusd_ioctl(struct inode *inode, struct file *file,
                       unsigned int cmd, unsigned long arg)
 #else
-STATIC long fusd_unlocked_ioctl (struct file *file,
+static long fusd_unlocked_ioctl (struct file *file,
 		       unsigned int cmd, unsigned long arg)
 #endif
 {
@@ -2528,7 +2540,7 @@ STATIC long fusd_unlocked_ioctl (struct file *file,
  * message queue.)  */
 
 /* do a "header" read: used by fusd_read */
-STATIC int fusd_read_header(char *user_buffer, size_t user_length, fusd_msg_t *msg)
+static int fusd_read_header(char *user_buffer, size_t user_length, fusd_msg_t *msg)
 {
 	int len = sizeof(fusd_msg_t);
 
@@ -2544,7 +2556,7 @@ STATIC int fusd_read_header(char *user_buffer, size_t user_length, fusd_msg_t *m
 }
 
 /* do a "data" read: used by fusd_read */
-STATIC int fusd_read_data(char *user_buffer, size_t user_length, fusd_msg_t *msg)
+static int fusd_read_data(char *user_buffer, size_t user_length, fusd_msg_t *msg)
 {
 	int len = msg->datalen;
 
@@ -2568,7 +2580,7 @@ STATIC int fusd_read_data(char *user_buffer, size_t user_length, fusd_msg_t *msg
 	return len;
 }
 
-STATIC ssize_t fusd_read(struct file *file,
+static ssize_t fusd_read(struct file *file,
                          char *user_buffer, /* The buffer to fill with data */
                          size_t user_length, /* The length of the buffer */
                          loff_t *offset) /* Our offset in the file */
@@ -2651,7 +2663,7 @@ invalid_dev:
 }
 
 /* a poll on /dev/fusd itself (the control channel) */
-STATIC unsigned int fusd_poll(struct file *file, poll_table *wait)
+static unsigned int fusd_poll(struct file *file, poll_table *wait)
 {
 	fusd_dev_t *fusd_dev;
 	GET_FUSD_DEV(file->private_data, fusd_dev);
@@ -2667,7 +2679,7 @@ invalid_dev:
 }
 
 #ifndef HAVE_UNLOCKED_IOCTL
-STATIC struct file_operations fusd_fops = {
+static struct file_operations fusd_fops = {
 	.owner = THIS_MODULE,
 	.open = fusd_open,
 	.read = fusd_read,
@@ -2678,7 +2690,7 @@ STATIC struct file_operations fusd_fops = {
 	.poll = fusd_poll,
 };
 #else
-STATIC struct file_operations fusd_fops = {
+static struct file_operations fusd_fops = {
 					   .owner = THIS_MODULE,
 					   .open = fusd_open,
 					   .read = fusd_read,
@@ -2706,7 +2718,7 @@ typedef struct fusd_status_state {
 } fusd_statcontext_t;
 
 /* open() called on /dev/fusd/status */
-STATIC int fusd_status_open(struct inode *inode, struct file *file)
+static int fusd_status_open(struct inode *inode, struct file *file)
 {
 	int error = 0;
 	fusd_statcontext_t *fs;
@@ -2730,7 +2742,7 @@ out:
 }
 
 /* close on /dev/fusd_status */
-STATIC int fusd_status_release(struct inode *inode, struct file *file)
+static int fusd_status_release(struct inode *inode, struct file *file)
 {
 	fusd_statcontext_t *fs = (fusd_statcontext_t *) file->private_data;
 
@@ -2746,10 +2758,10 @@ STATIC int fusd_status_release(struct inode *inode, struct file *file)
 
 /* ioctl() on /dev/fusd/status */
 #ifndef HAVE_UNLOCKED_IOCTL
-STATIC int fusd_status_ioctl(struct inode *inode, struct file *file,
+static int fusd_status_ioctl(struct inode *inode, struct file *file,
                              unsigned int cmd, unsigned long arg)
 #else
-STATIC long fusd_status_unlocked_ioctl (struct file *file,
+static long fusd_status_unlocked_ioctl (struct file *file,
 			      unsigned int cmd, unsigned long arg)
 #endif
 {
@@ -2780,7 +2792,7 @@ STATIC long fusd_status_unlocked_ioctl (struct file *file,
  * If there isn't at least space_needed difference between buf_size
  * and len, the existing contents are moved into a larger buffer. 
  */
-STATIC int maybe_expand_buffer(char **buf, int *buf_size, int len,
+static int maybe_expand_buffer(char **buf, int *buf_size, int len,
                                int space_needed)
 {
 	if (*buf_size - len < space_needed) {
@@ -2801,7 +2813,7 @@ STATIC int maybe_expand_buffer(char **buf, int *buf_size, int len,
 }
 
 /* Build a text buffer containing current fusd status. */
-STATIC void fusd_status_build_text(fusd_statcontext_t *fs)
+static void fusd_status_build_text(fusd_statcontext_t *fs)
 {
 	int buf_size = 512;
 	char *buf = KMALLOC(buf_size, GFP_KERNEL);
@@ -2856,7 +2868,7 @@ out:
 }
 
 /* Build the binary version of status */
-STATIC void fusd_status_build_binary(fusd_statcontext_t *fs)
+static void fusd_status_build_binary(fusd_statcontext_t *fs)
 {
 	int buf_size = 512;
 	char *buf = KMALLOC(buf_size, GFP_KERNEL);
@@ -2907,7 +2919,7 @@ out:
 	fs->need_new_status = 0;
 }
 
-STATIC ssize_t fusd_status_read(struct file *file,
+static ssize_t fusd_status_read(struct file *file,
                                 char *user_buffer, /* The buffer to fill with data */
                                 size_t user_length, /* The length of the buffer */
                                 loff_t *offset) /* Our offset in the file */
@@ -2950,7 +2962,7 @@ STATIC ssize_t fusd_status_read(struct file *file,
 }
 
 /* a poll on /dev/fusd itself (the control channel) */
-STATIC unsigned int fusd_status_poll(struct file *file, poll_table *wait)
+static unsigned int fusd_status_poll(struct file *file, poll_table *wait)
 {
 	fusd_statcontext_t *fs = (fusd_statcontext_t *) file->private_data;
 
@@ -2963,7 +2975,7 @@ STATIC unsigned int fusd_status_poll(struct file *file, poll_table *wait)
 }
 
 #ifndef HAVE_UNLOCKED_IOCTL
-STATIC struct file_operations fusd_status_fops = {
+static struct file_operations fusd_status_fops = {
 	.owner = THIS_MODULE,
 	.open = fusd_status_open,
 	.ioctl = fusd_status_ioctl,
@@ -2972,7 +2984,7 @@ STATIC struct file_operations fusd_status_fops = {
 	.poll = fusd_status_poll,
 };
 #else
-STATIC struct file_operations fusd_status_fops = {
+static struct file_operations fusd_status_fops = {
 						  .owner = THIS_MODULE,
 						  .open = fusd_status_open,
 						  .unlocked_ioctl = fusd_status_unlocked_ioctl,
@@ -2985,7 +2997,7 @@ STATIC struct file_operations fusd_status_fops = {
 /*************************************************************************/
 
 
-STATIC int init_fusd(void)
+static int init_fusd(void)
 {
 	int retval;
 
@@ -3096,7 +3108,7 @@ fail0:
 	return retval;
 }
 
-STATIC void cleanup_fusd(void)
+static void cleanup_fusd(void)
 {
 	RDEBUG(1, "cleaning up");
 
