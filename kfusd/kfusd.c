@@ -951,16 +951,6 @@ zombie_dev:
 	return -EPIPE;
 }
 
-/* fusd client system call handlers should call this after they call
- * fops_call, to destroy the message that was returned to them. */
-static void fusd_transaction_done(struct fusd_transaction *transaction)
-{
-	transaction->transid = -1;
-	transaction->pid = 0;
-}
-
-
-
 /********* Functions for opening a FUSD device *******************/
 
 
