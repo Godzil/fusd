@@ -75,6 +75,7 @@
 #include <linux/cdev.h>
 #include <linux/device.h>
 #include <linux/highmem.h>
+#include <linux/sched.h>
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
 #include <linux/sched/signal.h>
