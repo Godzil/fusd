@@ -145,8 +145,10 @@
 #define CLASS_DEVICE_DESTROY(a, b) device_destroy(a, b)
 #endif
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
 #define GET_USER_PAGES(t,m,s,n,w,f,p,v) get_user_pages_remote(t,m,s,n,(w?FOLL_WRITE:0)|(f?FOLL_FORCE:0),p,v, NULL)
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 0)
+#define GET_USER_PAGES(t,m,s,n,w,f,p,v) get_user_pages_remote(t,m,s,n,(w?FOLL_WRITE:0)|(f?FOLL_FORCE:0),p,v)
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(4, 6, 0)
 #define GET_USER_PAGES(t,m,s,n,w,f,p,v) get_user_pages_remote(t,m,s,n,w,f,p,v)
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(4, 4, 168) && LINUX_VERSION_CODE < KERNEL_VERSION(4, 5, 0)
