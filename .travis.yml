@@ -10,14 +10,14 @@ env:
 matrix:
   include:
     # Older version of the kernel
-    - name: "Kernel 2.6.13"
-      env: KERNEL_BRANCH="v2.6.13" GCC_VER="gcc-4.9"
-      addons:
-        apt:
-          packages:
-            - gcc-4.9
-          sources:
-            - ubuntu-toolchain-r-test
+#    - name: "Kernel 2.6.13"
+#      env: KERNEL_BRANCH="v2.6.13" GCC_VER="gcc-4.9"
+#      addons:
+#        apt:
+#          packages:
+#            - gcc-4.9
+#          sources:
+#            - ubuntu-toolchain-r-test
 
     - name: "Kernel 2.6.32"
       env: KERNEL_BRANCH="v2.6.32" GCC_VER="gcc-4.9"
