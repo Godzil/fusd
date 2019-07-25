@@ -1614,15 +1614,14 @@ static void fusd_client_mm_open(struct vm_area_struct *vma);
 
 static void fusd_client_mm_close(struct vm_area_struct *vma);
 
-/* int (*fault)(struct vm_area_struct *vma, struct vm_fault *vmf); */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0)
+static vm_fault_t fusd_client_fault (struct vm_fault *vmf);
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
 static int fusd_client_fault (struct vm_fault *vmf);
 #elif LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 30)
 static int fusd_client_fault (struct vm_area_struct *vma, struct vm_fault *vmf);
 #else
-
 static int fusd_client_fault(struct vm_area_struct *vma, struct vm_fault *vmf, int *type);
-
 #endif
 
 static struct vm_operations_struct fusd_remap_vm_ops = {
@@ -1736,7 +1735,9 @@ zombie_dev:
 	return -EPIPE;
 }
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0)
+static vm_fault_t fusd_client_fault (struct vm_fault *vmf)
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
 static int fusd_client_fault (struct vm_fault *vmf)
 #elif LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 30)
 static int fusd_client_fault (struct vm_area_struct *vma, struct vm_fault *vmf)
