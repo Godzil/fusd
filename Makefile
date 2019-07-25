@@ -23,8 +23,6 @@ export
 
 ####################################################
 
-SUBDIRS = kfusd libfusd examples
-
 default: 
 	$(MAKE) -C libfusd 
 	$(MAKE) -C kfusd
