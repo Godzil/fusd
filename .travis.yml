@@ -86,8 +86,8 @@ matrix:
             - ubuntu-toolchain-r-test
 
     # Stable versions
-    - name: "Kernel 5.1.y STABLE"
-      env: KERNEL_BRANCH="linux-5.1.y" GCC_VER="gcc-8"
+    - name: "Kernel 5.3.y STABLE"
+      env: KERNEL_BRANCH="linux-5.3.y" GCC_VER="gcc-8"
       addons:
         apt:
           packages:
@@ -96,8 +96,8 @@ matrix:
           sources:
             - ubuntu-toolchain-r-test
 
-    - name: "Kernel 5.2.y STABLE"
-      env: KERNEL_BRANCH="linux-5.2.y" GCC_VER="gcc-8"
+    - name: "Kernel 5.4.y STABLE"
+      env: KERNEL_BRANCH="linux-5.4.y" GCC_VER="gcc-8"
       addons:
         apt:
           packages:
