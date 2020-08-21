@@ -115,6 +115,9 @@ matrix:
             - gcc-8
           sources:
             - ubuntu-toolchain-r-test
+  allow_failures:
+    - name: "Kernel 5.8.y STABLE"
+
 
 # Here checkout kernels
 before_script:
